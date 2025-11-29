@@ -1,0 +1,29 @@
+{
+    "name": "despace",
+    "version": "0.1.0",
+    "description": "CLI to scaffold and manage Supabase monorepo workspaces",
+    "preferGlobal": true,
+    "bin": "./dist/cli.js",
+    "files": [
+        "dist",
+        "src/templates-data",
+        "src/templates"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "start": "node ./dist/cli.js",
+        "create": "tsc && node ./dist/cli.js create"
+    },
+    "dependencies": {
+        "execa": "^8.0.0",
+        "fs-extra": "^11.2.0",
+        "inquirer": "^9.2.0"
+    },
+    "devDependencies": {
+        "@types/execa": "^0.9.0",
+        "@types/fs-extra": "^11.0.4",
+        "@types/inquirer": "^9.0.9",
+        "@types/node": "^20.14.0",
+        "typescript": "^5.5.0"
+    }
+}
