@@ -7,9 +7,11 @@
     "files": [
         "dist",
         "src/templates-data",
-        "src/templates"
+        "src/templates-data/packages/*",
+        "src/templates/"
     ],
     "scripts": {
+        "link:dev": "npm unlink -g despace || true && yarn install && yarn build && npm link",
         "build": "tsc",
         "start": "node ./dist/cli.js",
         "create": "tsc && node ./dist/cli.js create"
@@ -25,5 +27,6 @@
         "@types/inquirer": "^9.0.9",
         "@types/node": "^20.14.0",
         "typescript": "^5.5.0"
-    }
+    },
+    "packageManager": "yarn@4.6.0+sha224.acd0786f07ffc6c933940eb65fc1d627131ddf5455bddcc295dc90fd"
 }

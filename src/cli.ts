@@ -50,7 +50,11 @@ Arguments:
 Options:
   --package-manager <pm>        Package manager: yarn or npm (default: yarn)
   --git-url <url>               Git repository URL (optional)
-  --no-vite                     Skip creating example Vite app
+  --app-type <type>             App type: next, vite, or none (default: next)
+  --app-name <name>             Name for the app (default: web)
+  --no-chat                     Exclude assistant-ui chat components
+  --chat-model <model>          Chat model: openai, anthropic, gemini, groq, azure, aws, cohere, ollama (default: openai)
+  --chat-theme <theme>          Chat theme: default, minimal, floating (default: default)
   --help, -h                    Show this help
 
 Interactive Mode:
@@ -63,13 +67,16 @@ Examples:
   # With all options
   despace create workspace my-workspace --package-manager npm --git-url https://github.com/user/repo
 
+  # Without chat
+  despace create workspace my-workspace --no-chat
+
 What gets created:
   - Root workspace with package.json and scripts
   - packages/supabase-core: Core Supabase types and client
   - packages/stripe-core: Stripe integration package
+  - packages/ui: shadcn/ui component library (with assistant-ui chat)
   - scripts/: Shell scripts for generating Supabase instances
-  - supabase-workspace-cli/: CLI tool
-  - apps/example: Example Vite app (if not disabled)
+  - apps/example: Example app (if not disabled)
 `;
 
 const SUPABASE_HELP = `
@@ -164,8 +171,14 @@ function parseArgs(args: string[]): ParsedArgs {
         } else if (arg === '--git-url') {
             result.options.gitUrl = args[i + 1];
             i += 2;
-        } else if (arg === '--no-vite') {
-            result.options.createVite = false;
+        } else if (arg === '--app-type') {
+            result.options.appType = args[i + 1];
+            i += 2;
+        } else if (arg === '--app-name') {
+            result.options.appName = args[i + 1];
+            i += 2;
+        } else if (arg === '--no-vite' || arg === '--no-app') {
+            result.options.appType = 'none';
             i++;
         } else if (arg === '--project-id') {
             result.options.projectId = args[i + 1];
@@ -194,6 +207,15 @@ function parseArgs(args: string[]): ParsedArgs {
         } else if (arg === '--with-drizzle') {
             result.options.withDrizzle = true;
             i++;
+        } else if (arg === '--no-chat') {
+            result.options.includeChat = false;
+            i++;
+        } else if (arg === '--chat-model') {
+            result.options.chatModel = args[i + 1];
+            i += 2;
+        } else if (arg === '--chat-theme') {
+            result.options.chatTheme = args[i + 1];
+            i += 2;
         } else if (!arg.startsWith('--')) {
             // Positional argument
             if (!result.command) {
@@ -258,16 +280,30 @@ async function main() {
             }
 
             // If interactive options needed
-            if (!parsed.options.gitUrl && parsed.options.createVite === undefined) {
+            if (!parsed.options.gitUrl && parsed.options.appType === undefined) {
                 const options = await promptWorkspaceOptions(parsed.name);
                 options.packageManager = packageManager;
+                // Use CLI overrides if provided
+                if (parsed.options.includeChat !== undefined) {
+                    options.includeChat = parsed.options.includeChat;
+                }
+                if (parsed.options.chatModel) {
+                    options.chatModel = parsed.options.chatModel;
+                }
+                if (parsed.options.chatTheme) {
+                    options.chatTheme = parsed.options.chatTheme;
+                }
                 await createWorkspace(options);
             } else {
                 await createWorkspace({
                     workspaceName: parsed.name,
                     packageManager,
                     gitUrl: parsed.options.gitUrl,
-                    createVite: parsed.options.createVite !== false
+                    appType: parsed.options.appType || 'next',
+                    appName: parsed.options.appName || 'web',
+                    includeChat: parsed.options.includeChat,
+                    chatModel: parsed.options.chatModel,
+                    chatTheme: parsed.options.chatTheme
                 });
             }
         } else if (parsed.subcommand === 'new-supabase') {
@@ -276,21 +312,15 @@ async function main() {
                 process.exit(0);
             }
 
-            if (!parsed.name) {
-                console.error('Error: Supabase instance name is required');
-                console.error('Usage: despace create new-supabase <name> [options]');
-                console.error('Run "despace create new-supabase --help" for more information');
-                process.exit(1);
-            }
-
-            // Validate instance name
-            if (!/^[a-z0-9-]+$/.test(parsed.name)) {
+            // Name is optional - can be prompted
+            // Validate instance name if provided
+            if (parsed.name && !/^[a-z0-9-]+$/.test(parsed.name)) {
                 console.error('Error: Instance name must contain only lowercase letters, numbers, and hyphens');
                 process.exit(1);
             }
 
-            // If required options are missing, prompt
-            if (!parsed.options.projectId || !parsed.options.anonKey) {
+            // If required options are missing or name not provided, prompt
+            if (!parsed.name || !parsed.options.projectId || !parsed.options.anonKey) {
                 const options = await promptSupabaseOptions(parsed.name);
                 await createSupabase(options);
             } else {

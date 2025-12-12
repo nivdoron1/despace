@@ -85,8 +85,8 @@ export class PackageManagerUtil {
      * Get packageManager field for package.json
      */
     getPackageManagerField(): string | undefined {
-        // Only Yarn has a specific version we want to pin
-        return this.pm === 'yarn' ? 'yarn@4.12.0' : undefined;
+        // Don't set packageManager field to avoid corepack conflicts
+        return undefined;
     }
 }
 

@@ -1,0 +1,31 @@
+{
+    "name": "@templates-data/supabase-auth",
+    "version": "1.0.0",
+    "description": "Supabase authentication components with shadcn/ui",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch"
+    },
+    "keywords": [
+        "supabase",
+        "auth",
+        "shadcn",
+        "react"
+    ],
+    "license": "MIT",
+    "peerDependencies": {
+        "react": ">=18.0.0",
+        "react-dom": ">=18.0.0"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.84.0",
+        "ui": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "typescript": "^5.3.0"
+    }
+}
