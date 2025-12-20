@@ -1,0 +1,2 @@
+export const PUBLIC_SCHEMA_INITIAL_TEMPLATE = `
+`;

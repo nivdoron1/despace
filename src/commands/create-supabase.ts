@@ -13,6 +13,12 @@ import { VITE_ENV_TEMPLATE } from '../templates/VITE_ENV_TEMPLATE';
 import { NEXT_ENV_TEMPLATE } from '../templates/NEXT_ENV_TEMPLATE';
 import { generateEnvExampleVite, generateEnvExampleNext } from '../templates/ENV_EXAMPLE_TEMPLATE';
 import { ESLINT_CONFIG_TEMPLATE } from '../templates/ESLINT_CONFIG_TEMPLATE';
+import { AUTH_SCHEMA_TEMPLATE } from '../templates/AUTH_SCHEMA_TEMPLATE';
+import { DB_SCHEMA_TEMPLATE } from '../templates/DB_SCHEMA_TEMPLATE';
+import { PUBLIC_SCHEMA_INITIAL_TEMPLATE } from '../templates/PUBLIC_SCHEMA_INITIAL_TEMPLATE';
+
+
+
 
 export async function createSupabase(options: CreateSupabaseOptions): Promise<void> {
     // Find workspace root
@@ -192,28 +198,21 @@ ${keyVarName}="${options.anonKey}"
     // Drizzle setup
     if (options.withDrizzle) {
         console.log('Setting up Drizzle ORM...');
-        await fs.mkdirp(path.join(packageDir, 'src', 'db', 'public'));
+        const publicSchemaDir = path.join(packageDir, 'src', 'db', 'public');
+        await fs.mkdirp(publicSchemaDir);
+        await fs.writeFile(path.join(publicSchemaDir, 'schema.ts'), PUBLIC_SCHEMA_INITIAL_TEMPLATE);
+        console.log('✓ Public schema initialized');
 
-        // Create basic public schema
-        const publicSchema = `import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+        const authSchemaDir = path.join(packageDir, 'src', 'db', 'auth');
+        await fs.mkdirp(authSchemaDir);
+        await fs.writeFile(path.join(authSchemaDir, 'schema.ts'), AUTH_SCHEMA_TEMPLATE);
+        console.log('✓ Auth schema initialized (read-only)');
 
-export const profiles = pgTable('profiles', {
-  id: uuid('id').primaryKey(),
-  email: text('email'),
-  full_name: text('full_name'),
-  avatar_url: text('avatar_url'),
-  updated_at: timestamp('updated_at').defaultNow(),
-  created_at: timestamp('created_at').defaultNow(),
-});
-`;
-        await fs.writeFile(path.join(packageDir, 'src', 'db', 'public', 'schema.ts'), publicSchema);
+        await fs.writeFile(path.join(packageDir, 'src', 'db', 'schema.ts'), DB_SCHEMA_TEMPLATE);
+        console.log('✓ Combined database schema created');
 
-        // Create db/schema.ts
-        const dbSchema = `import * as publicSchema from './public/schema';
 
-export const schema = { ...publicSchema };
-`;
-        await fs.writeFile(path.join(packageDir, 'src', 'db', 'schema.ts'), dbSchema);
+
 
         // Create drizzle.config.ts
         const drizzleConfig = `import { config } from 'dotenv';
