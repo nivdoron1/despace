@@ -223,7 +223,6 @@ export function createStripeService(
     if (!secretKey) throw new Error('Stripe secret key is required.');
 
     const stripe = new Stripe(secretKey, {
-        apiVersion: apiVersion || '2023-10-16',
         typescript: true,
     });
 
