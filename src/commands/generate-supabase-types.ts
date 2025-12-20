@@ -310,7 +310,7 @@ ${insertUpdateTypes}`;
     function serviceTemplate(tableName: string) {
         const serviceName = camelCase(tableName) + 'Service'; // e.g., driveWatchesService
 
-        return `import { SupabaseService } from '@${supabase_workspace_name}/supabase-core';
+        return `import { SupabaseService } from '../../../database.service';
 import { supabase } from '../../../client';
 
 /**
