@@ -1,181 +1,332 @@
-#!/usr/bin/env node
-/* eslint-disable */
-// @ts-nocheck
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Get target directory from command line argument or environment variable
-const targetArg = process.argv[2];
-const TARGET_SUPABASE_PROJECT = targetArg
-  ? path.resolve(targetArg)
-  : process.env.STRIPE_TARGET_DIR
-    ? path.resolve(process.env.STRIPE_TARGET_DIR)
-    : path.resolve(__dirname, '../../../supabase-example');
-
-console.log(`Target directory: ${TARGET_SUPABASE_PROJECT}`);
-
-const FUNCTIONS = [
-  { name: 'stripe-webhook-handler', description: 'Handles all Stripe webhook events' },
-  { name: 'create-checkout-session', description: 'Creates Stripe checkout sessions' },
-  { name: 'sync-stripe-customer', description: 'Syncs Stripe customer with Supabase Auth user' },
-  { name: 'get-customer-portal', description: 'Creates Stripe customer portal session' },
-];
-
-async function generate() {
-  console.log('🚀 Starting Comprehensive Stripe + Supabase Generator...\n');
-  try {
-    ensureTargetDirectory();
-    initializeSupabaseProject();
-
-    // 1. Generate Edge Functions
-    for (const func of FUNCTIONS) {
-      createFunction(func.name);
-      generateFunctionContent(func.name);
-    }
-    createSharedUtils();
-
-    // 2. Generate Client Service
-    createClientStripeService();
-
-    printCompletionMessage();
-  } catch (error) {
-    console.error('\n❌ Generation failed:', error.message);
-    process.exit(1);
-  }
-}
-
-function ensureTargetDirectory() {
-  console.log(`📂 Checking target directory: ${TARGET_SUPABASE_PROJECT}`);
-  if (!fs.existsSync(TARGET_SUPABASE_PROJECT)) {
-    fs.mkdirSync(TARGET_SUPABASE_PROJECT, { recursive: true });
-  }
-  console.log('   ✓ Target directory ready\n');
-}
-
-function initializeSupabaseProject() {
-  console.log('🔧 Initializing Supabase project...');
-  const supabaseConfigPath = path.join(TARGET_SUPABASE_PROJECT, 'supabase');
-  if (fs.existsSync(supabaseConfigPath)) {
-    console.log('   ⏩ Supabase already initialized\n');
-    return;
-  }
-  try {
-    execSync('npx supabase init', { cwd: TARGET_SUPABASE_PROJECT, stdio: 'inherit' });
-    console.log('   ✓ Supabase project initialized\n');
-  } catch (error) {
-    throw new Error(`Failed to initialize: ${error.message}`);
-  }
-}
-
-function createFunction(functionName) {
-  console.log(`🔨 Creating function: ${functionName}...`);
-  const functionPath = path.join(TARGET_SUPABASE_PROJECT, 'supabase', 'functions', functionName);
-  if (fs.existsSync(functionPath)) {
-    console.log('   ⏩ Function exists, will overwrite...\n');
-    return;
-  }
-  try {
-    execSync(`npx supabase functions new ${functionName}`, { cwd: TARGET_SUPABASE_PROJECT, stdio: 'inherit' });
-    console.log('   ✓ Function created\n');
-  } catch (error) {
-    throw new Error(`Failed to create ${functionName}: ${error.message}`);
-  }
-}
-
-function generateFunctionContent(functionName) {
-  console.log(`✍️  Generating ${functionName} content...`);
-  const functionFilePath = path.join(TARGET_SUPABASE_PROJECT, 'supabase', 'functions', functionName, 'index.ts');
-  let content = '';
-  switch (functionName) {
-    case 'stripe-webhook-handler':
-      content = getWebhookHandlerTemplate();
-      break;
-    case 'create-checkout-session':
-      content = getCreateCheckoutTemplate();
-      break;
-    case 'sync-stripe-customer':
-      content = getSyncCustomerTemplate();
-      break;
-    case 'get-customer-portal':
-      content = getCustomerPortalTemplate();
-      break;
-    default:
-      throw new Error(`Unknown function: ${functionName}`);
-  }
-  fs.writeFileSync(functionFilePath, content, 'utf8');
-  console.log('   ✓ Content written\n');
-}
-
-function createSharedUtils() {
-  console.log('📦 Creating shared utilities...');
-  const utilsPath = path.join(TARGET_SUPABASE_PROJECT, 'supabase', 'functions', '_shared');
-  if (!fs.existsSync(utilsPath)) {
-    fs.mkdirSync(utilsPath, { recursive: true });
-  }
-  const corsContent = getCorsUtilTemplate();
-  fs.writeFileSync(path.join(utilsPath, 'cors.ts'), corsContent, 'utf8');
-  console.log('   ✓ Shared utilities created\n');
-}
-
-function createClientStripeService() {
-  console.log('🛍️  Creating Client/Server Stripe Service...');
-  const servicePath = path.join(TARGET_SUPABASE_PROJECT, 'src', 'lib', 'stripe');
-
-  if (!fs.existsSync(servicePath)) {
-    fs.mkdirSync(servicePath, { recursive: true });
-  }
-
-  // 1. stripe.service.ts
-  const serviceContent = getStripeServiceTemplate();
-  fs.writeFileSync(path.join(servicePath, 'stripe.service.ts'), serviceContent, 'utf8');
-
-  // 2. stripe.types.ts
-  const typesContent = getStripeTypesTemplate();
-  fs.writeFileSync(path.join(servicePath, 'stripe.types.ts'), typesContent, 'utf8');
-
-  // 3. index.ts
-  const indexContent = getStripeIndexTemplate();
-  fs.writeFileSync(path.join(servicePath, 'index.ts'), indexContent, 'utf8');
-
-  console.log('   ✓ src/lib/stripe service created\n');
-}
-
-function printCompletionMessage() {
-  console.log('\n✅ Generation complete!\n');
-  console.log('📁 Generated functions:');
-  FUNCTIONS.forEach(f => console.log(`   - ${f.name}: ${f.description}`));
-  console.log('📁 Generated Service:');
-  console.log('   - src/lib/stripe/stripe.service.ts');
-  console.log('\n📝 Required Environment Variables:');
-  console.log('   - STRIPE_SECRET_KEY');
-  console.log('   - STRIPE_WEBHOOK_SECRET');
-  console.log('   - SUPABASE_URL (auto-provided)');
-  console.log('   - SUPABASE_SERVICE_ROLE_KEY (auto-provided)');
-  console.log('   - FRONTEND_URL');
-  console.log('\n🚀 Next Steps:');
-  console.log('   1. Deploy: supabase functions deploy');
-  console.log('   2. Set secrets: supabase secrets set STRIPE_SECRET_KEY=sk_... FRONTEND_URL=https://...');
-  console.log('   3. Configure webhook: https://your-project.supabase.co/functions/v1/stripe-webhook-handler\n');
-}
-
-// --- Templates ---
-
-function getCorsUtilTemplate() {
-  return `// CORS utility
+export const CORS_UTIL_TEMPLATE = `// CORS utility
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 `;
+
+export const CORE_STRIPE_SERVICE_TEMPLATE = `import Stripe from 'stripe';
+import {
+    StripeServiceConfig,
+    WebhookVerificationResult,
+    PaginationParams
+} from './core-types';
+
+// =================================================================
+// Utility Functions (Pure Helpers)
+// =================================================================
+
+/**
+ * Normalizes pagination parameters for Stripe
+ */
+export function normalizePagination(params?: PaginationParams): Stripe.PaginationParams {
+    return {
+        limit: params?.limit || 10,
+        starting_after: params?.starting_after,
+        ending_before: params?.ending_before,
+    };
 }
 
-function getStripeServiceTemplate() {
-  return `import { createStripeService } from '@supabase-workspace/stripe-core';
+// =================================================================
+// Core Stripe Functions (Dependency-Injected)
+// =================================================================
+
+// --- Customer Operations ---
+
+export async function createCustomer(
+    stripe: Stripe,
+    params: Stripe.CustomerCreateParams
+): Promise<Stripe.Customer> {
+    try {
+        return await stripe.customers.create(params);
+    } catch (error) {
+        console.error('Error creating customer:', error);
+        throw error;
+    }
+}
+
+export async function getCustomer(
+    stripe: Stripe,
+    customerId: string
+): Promise<Stripe.Customer | Stripe.DeletedCustomer> {
+    const customer = await stripe.customers.retrieve(customerId);
+    return customer;
+}
+
+export async function updateCustomer(
+    stripe: Stripe,
+    customerId: string,
+    params: Stripe.CustomerUpdateParams
+): Promise<Stripe.Customer> {
+    return await stripe.customers.update(customerId, params);
+}
+
+/**
+ * List Customers (Paginated)
+ * Returns a specific page of results.
+ */
+export async function listCustomers(
+    stripe: Stripe,
+    params?: Stripe.CustomerListParams
+): Promise<Stripe.ApiList<Stripe.Customer>> {
+    return await stripe.customers.list(params);
+}
+
+/**
+ * List ALL Customers (Auto-Pagination)
+ * WARNING: heavy operation.
+ */
+export async function listAllCustomers(
+    stripe: Stripe,
+    limit: number = 10000
+): Promise<Stripe.Customer[]> {
+    return await stripe.customers.list({ limit: 100 })
+        .autoPagingToArray({ limit });
+}
+
+// --- Product & Price Operations ---
+
+export async function createProduct(
+    stripe: Stripe,
+    params: Stripe.ProductCreateParams
+): Promise<Stripe.Product> {
+    return await stripe.products.create(params);
+}
+
+export async function listProducts(
+    stripe: Stripe,
+    params?: Stripe.ProductListParams
+): Promise<Stripe.ApiList<Stripe.Product>> {
+    return await stripe.products.list(params);
+}
+
+export async function listAllActiveProducts(
+    stripe: Stripe
+): Promise<Stripe.Product[]> {
+    return await stripe.products.list({ active: true, limit: 100 })
+        .autoPagingToArray({ limit: 1000 });
+}
+
+export async function createPrice(
+    stripe: Stripe,
+    params: Stripe.PriceCreateParams
+): Promise<Stripe.Price> {
+    return await stripe.prices.create(params);
+}
+
+// --- Subscription Operations ---
+
+export async function createSubscription(
+    stripe: Stripe,
+    params: Stripe.SubscriptionCreateParams
+): Promise<Stripe.Subscription> {
+    return await stripe.subscriptions.create(params);
+}
+
+export async function cancelSubscription(
+    stripe: Stripe,
+    subscriptionId: string
+): Promise<Stripe.Subscription> {
+    return await stripe.subscriptions.cancel(subscriptionId);
+}
+
+export async function listCustomerSubscriptions(
+    stripe: Stripe,
+    customerId: string,
+    params?: PaginationParams
+): Promise<Stripe.ApiList<Stripe.Subscription>> {
+    const paging = normalizePagination(params);
+    return await stripe.subscriptions.list({
+        customer: customerId,
+        ...paging
+    });
+}
+
+// --- Checkout & Payments ---
+
+export async function createCheckoutSession(
+    stripe: Stripe,
+    params: Stripe.Checkout.SessionCreateParams
+): Promise<Stripe.Checkout.Session> {
+    return await stripe.checkout.sessions.create(params);
+}
+
+export async function getCheckoutSession(
+    stripe: Stripe,
+    sessionId: string
+): Promise<Stripe.Checkout.Session> {
+    return await stripe.checkout.sessions.retrieve(sessionId);
+}
+
+export async function createPaymentIntent(
+    stripe: Stripe,
+    params: Stripe.PaymentIntentCreateParams
+): Promise<Stripe.PaymentIntent> {
+    return await stripe.paymentIntents.create(params);
+}
+
+// --- Invoice Operations ---
+
+export async function listInvoices(
+    stripe: Stripe,
+    params?: Stripe.InvoiceListParams
+): Promise<Stripe.ApiList<Stripe.Invoice>> {
+    return await stripe.invoices.list(params);
+}
+
+// --- Webhooks & Utilities ---
+
+export function verifyWebhookSignature(
+    stripe: Stripe,
+    payload: string | Buffer,
+    signature: string,
+    webhookSecret: string
+): WebhookVerificationResult {
+    try {
+        const event = stripe.webhooks.constructEvent(
+            payload,
+            signature,
+            webhookSecret
+        );
+        return { event };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return { event: null, error: errorMessage };
+    }
+}
+
+// =================================================================
+// Service Factory
+// =================================================================
+
+/**
+ * Creates a Stripe service object with methods pre-bound to a specific
+ * Stripe client instance.
+ * * @param config Configuration object or API Key string
+ */
+export function createStripeService(
+    config?: StripeServiceConfig | string
+) {
+    // 1. Initialize Client
+    let secretKey: string;
+    let apiVersion: Stripe.LatestApiVersion | undefined;
+
+    if (typeof config === 'string') {
+        secretKey = config;
+    } else if (config) {
+        secretKey = config.secretKey;
+        apiVersion = config.apiVersion;
+    } else {
+        secretKey = process.env.STRIPE_SECRET_KEY || '';
+    }
+
+    if (!secretKey) throw new Error('Stripe secret key is required.');
+
+    const stripe = new Stripe(secretKey, {
+        apiVersion: apiVersion || '2023-10-16',
+        typescript: true,
+    });
+
+    // 2. Return Bound Methods
+    return {
+        // Utils
+        getClient: () => stripe,
+
+        // Customer
+        createCustomer: (params: Stripe.CustomerCreateParams) =>
+            createCustomer(stripe, params),
+        getCustomer: (id: string) =>
+            getCustomer(stripe, id),
+        updateCustomer: (id: string, params: Stripe.CustomerUpdateParams) =>
+            updateCustomer(stripe, id, params),
+        listCustomers: (params?: Stripe.CustomerListParams) =>
+            listCustomers(stripe, params),
+        listAllCustomers: (limit?: number) =>
+            listAllCustomers(stripe, limit),
+
+        // Product & Price
+        createProduct: (params: Stripe.ProductCreateParams) =>
+            createProduct(stripe, params),
+        listProducts: (params?: Stripe.ProductListParams) =>
+            listProducts(stripe, params),
+        listAllActiveProducts: () =>
+            listAllActiveProducts(stripe),
+        createPrice: (params: Stripe.PriceCreateParams) =>
+            createPrice(stripe, params),
+
+        // Subscription
+        createSubscription: (params: Stripe.SubscriptionCreateParams) =>
+            createSubscription(stripe, params),
+        cancelSubscription: (id: string) =>
+            cancelSubscription(stripe, id),
+        listCustomerSubscriptions: (customerId: string, params?: PaginationParams) =>
+            listCustomerSubscriptions(stripe, customerId, params),
+
+        // Checkout
+        createCheckoutSession: (params: Stripe.Checkout.SessionCreateParams) =>
+            createCheckoutSession(stripe, params),
+        getCheckoutSession: (id: string) =>
+            getCheckoutSession(stripe, id),
+        createPaymentIntent: (params: Stripe.PaymentIntentCreateParams) =>
+            createPaymentIntent(stripe, params),
+
+        // Invoice
+        listInvoices: (params?: Stripe.InvoiceListParams) =>
+            listInvoices(stripe, params),
+
+        // Webhook
+        verifyWebhookSignature: (payload: string | Buffer, sig: string, secret: string) =>
+            verifyWebhookSignature(stripe, payload, sig, secret),
+    };
+}
+`;
+
+export const CORE_STRIPE_TYPES_TEMPLATE = `import Stripe from 'stripe';
+
+// Re-export commonly used Stripe types for convenience
+export type { Stripe };
+
+// Webhook event types
+export type StripeWebhookEvent = Stripe.Event;
+
+// Customer types
+export type StripeCustomer = Stripe.Customer;
+export type StripeCustomerCreateParams = Stripe.CustomerCreateParams;
+
+// Checkout session types
+export type StripeCheckoutSession = Stripe.Checkout.Session;
+
+// Subscription types
+export type StripeSubscription = Stripe.Subscription;
+
+// Product types
+export type StripeProduct = Stripe.Product;
+export type StripePrice = Stripe.Price;
+
+// Payment Intent types
+export type StripePaymentIntent = Stripe.PaymentIntent;
+
+// Webhook signature verification result
+export interface WebhookVerificationResult {
+    event: StripeWebhookEvent | null;
+    error?: string;
+}
+
+// Configuration for Stripe service
+export interface StripeServiceConfig {
+    secretKey: string;
+    apiVersion?: Stripe.LatestApiVersion;
+}
+
+// Wrapper for standard pagination parameters
+export interface PaginationParams {
+    limit?: number;
+    starting_after?: string;
+    ending_before?: string;
+}
+`;
+
+export const STRIPE_SERVICE_TEMPLATE = `import { createStripeService } from './core';
 import { Stripe } from 'stripe';
 
 /**
@@ -200,26 +351,20 @@ export const stripeService = {
   // --- End custom methods ---
 };
 `;
-}
 
-function getStripeTypesTemplate() {
-  return `// Re-export types from the core package or define custom ones here
+export const STRIPE_TYPES_TEMPLATE = `// Re-export types from the core package or define custom ones here
 export type { Stripe } from 'stripe';
 
 export interface StripeServiceConfig {
   secretKey: string;
 }
 `;
-}
 
-function getStripeIndexTemplate() {
-  return `export * from './stripe.service';
+export const STRIPE_INDEX_TEMPLATE = `export * from './stripe.service';
 export * from './stripe.types';
 `;
-}
 
-function getWebhookHandlerTemplate() {
-  return `// Stripe Webhook Handler
+export const WEBHOOK_HANDLER_TEMPLATE = `// Stripe Webhook Handler
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -270,7 +415,7 @@ Deno.serve(async (req) => {
       case 'checkout.session.completed': {
         const session = event.data.object;
         console.log('Checkout completed:', session.id);
-        
+
         // Update user metadata with Stripe customer ID
         if (session.client_reference_id && session.customer) {
           await supabase.auth.admin.updateUserById(session.client_reference_id, {
@@ -278,7 +423,7 @@ Deno.serve(async (req) => {
               stripe_customer_id: session.customer,
             },
           });
-          
+
           // Create subscription record
           await supabase.from('subscriptions').upsert({
             user_id: session.client_reference_id,
@@ -294,7 +439,7 @@ Deno.serve(async (req) => {
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
         console.log('Subscription event:', subscription.id);
-        
+
         await supabase.from('subscriptions').upsert({
           stripe_subscription_id: subscription.id,
           stripe_customer_id: subscription.customer,
@@ -312,7 +457,7 @@ Deno.serve(async (req) => {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
         console.log('Subscription cancelled:', subscription.id);
-        
+
         await supabase.from('subscriptions').update({
           status: 'cancelled',
           cancelled_at: new Date().toISOString(),
@@ -323,7 +468,7 @@ Deno.serve(async (req) => {
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object;
         console.log('Payment succeeded:', invoice.id);
-        
+
         if (invoice.subscription) {
           await supabase.from('subscriptions').update({
             status: 'active',
@@ -336,7 +481,7 @@ Deno.serve(async (req) => {
       case 'invoice.payment_failed': {
         const invoice = event.data.object;
         console.log('Payment failed:', invoice.id);
-        
+
         if (invoice.subscription) {
           await supabase.from('subscriptions').update({
             status: 'past_due',
@@ -362,10 +507,8 @@ Deno.serve(async (req) => {
   }
 });
 `;
-}
 
-function getCreateCheckoutTemplate() {
-  return `// Create Checkout Session
+export const CREATE_CHECKOUT_TEMPLATE = `// Create Checkout Session
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -407,7 +550,7 @@ Deno.serve(async (req) => {
 
     // Check if user already has a Stripe customer ID
     let customerId = user.user_metadata?.stripe_customer_id;
-    
+
     if (!customerId) {
       // Create new Stripe customer
       const customer = await stripe.customers.create({
@@ -417,7 +560,7 @@ Deno.serve(async (req) => {
         },
       });
       customerId = customer.id;
-      
+
       // Update user metadata
       const supabaseAdmin = createClient(
         supabaseUrl,
@@ -437,29 +580,27 @@ Deno.serve(async (req) => {
         quantity: 1,
       }],
       mode: 'subscription',
-      success_url: \`\${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}\`,
-      cancel_url: \`\${frontendUrl}/pricing\`,
+      success_url: \`\${ frontendUrl } / success ? session_id = { CHECKOUT_SESSION_ID }\`,
+      cancel_url: \`\${ frontendUrl } / pricing\`,
       metadata: {
-        supabase_user_id: user.id,
-      },
+      supabase_user_id: user.id,
+    },
     });
 
-    return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
+  console.error('Error:', error);
+  return new Response(JSON.stringify({ error: error.message }), {
+    status: 500,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 });
 `;
-}
 
-function getSyncCustomerTemplate() {
-  return `// Sync Stripe Customer
+export const SYNC_CUSTOMER_TEMPLATE = `// Sync Stripe Customer
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -538,10 +679,8 @@ Deno.serve(async (req) => {
   }
 });
 `;
-}
 
-function getCustomerPortalTemplate() {
-  return `// Customer Portal
+export const CUSTOMER_PORTAL_TEMPLATE = `// Customer Portal
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -583,21 +722,18 @@ Deno.serve(async (req) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: \`\${frontendUrl}/account\`,
+      return_url: \`\${ frontendUrl } / account\`,
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+return new Response(JSON.stringify({ url: session.url }), {
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
+  console.error('Error:', error);
+  return new Response(JSON.stringify({ error: error.message }), {
+    status: 500,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 });
 `;
-}
-
-generate();

@@ -37,25 +37,18 @@ export async function findWorkspaceRoot(startDir: string = process.cwd()): Promi
 
 /**
  * Validate workspace structure
+ * A valid workspace must have:
+ * - packages/ directory (for workspace packages)
+ * 
+ * Note: scripts/ is no longer required since the CLI handles supabase creation internally
  */
 export async function validateWorkspace(workspaceInfo: WorkspaceInfo): Promise<boolean> {
     const { rootDir } = workspaceInfo;
 
     // Check for essential directories
     const packagesDir = path.join(rootDir, 'packages');
-    const scriptsDir = path.join(rootDir, 'scripts');
 
     if (!await fs.pathExists(packagesDir)) {
-        return false;
-    }
-
-    if (!await fs.pathExists(scriptsDir)) {
-        return false;
-    }
-
-    // Check for generate-supabase-package.sh script
-    const generateScript = path.join(scriptsDir, 'generate-supabase-package.sh');
-    if (!await fs.pathExists(generateScript)) {
         return false;
     }
 

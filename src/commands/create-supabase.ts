@@ -1,8 +1,17 @@
 import path from 'path';
+import fs from 'fs-extra';
 import inquirer from 'inquirer';
 import { execa } from 'execa';
-import type { CreateSupabaseOptions } from '../types';
+import type { CreateSupabaseOptions, SupabaseFramework } from '../types';
 import { findWorkspaceRoot, validateWorkspace } from '../utils/workspace-detector';
+import { DATABASE_SERVICE_TEMPLATE } from '../templates/DATABASE_SERVICE_TEMPLATE';
+import { DATABASE_TYPES_TEMPLATE } from '../templates/DATABASE_TYPES_TEMPLATE';
+import { CLIENT_TEMPLATE_VITE, CLIENT_TEMPLATE_NEXT } from '../templates/CLIENT_TEMPLATE';
+import { CONFIG_TEMPLATE_VITE, CONFIG_TEMPLATE_NEXT } from '../templates/CONFIG_TEMPLATE';
+import { INDEX_TEMPLATE, INDEX_TEMPLATE_WITH_STRIPE } from '../templates/INDEX_TEMPLATE';
+import { VITE_ENV_TEMPLATE } from '../templates/VITE_ENV_TEMPLATE';
+import { NEXT_ENV_TEMPLATE } from '../templates/NEXT_ENV_TEMPLATE';
+import { generateEnvExampleVite, generateEnvExampleNext } from '../templates/ENV_EXAMPLE_TEMPLATE';
 
 export async function createSupabase(options: CreateSupabaseOptions): Promise<void> {
     // Find workspace root
@@ -18,7 +27,7 @@ export async function createSupabase(options: CreateSupabaseOptions): Promise<vo
     const isValid = await validateWorkspace(workspaceInfo);
     if (!isValid) {
         console.error('Error: Invalid workspace structure.');
-        console.error('Missing required directories or scripts.');
+        console.error('Missing required packages/ directory.');
         process.exit(1);
     }
 
@@ -26,55 +35,263 @@ export async function createSupabase(options: CreateSupabaseOptions): Promise<vo
     console.log(`Workspace root: ${workspaceInfo.rootDir}`);
     console.log('');
 
-    // Build command args for generate-supabase-package.sh
-    const scriptPath = path.join(workspaceInfo.rootDir, 'scripts', 'generate-supabase-package.sh');
-    const args = [
-        options.name,
-        '--project-id', options.projectId,
-        '--anon-key', options.anonKey,
-    ];
+    const instanceName = options.name;
+    const packageName = `@${workspaceInfo.workspaceName}/supabase-${instanceName}`;
+    const packageDir = path.join(workspaceInfo.rootDir, 'packages', `supabase-${instanceName}`);
+    const supabaseUrl = `https://${options.projectId}.supabase.co`;
 
-    if (options.serviceKey) {
-        args.push('--service-key', options.serviceKey);
+    // Check if package already exists
+    if (await fs.pathExists(packageDir)) {
+        console.error(`Error: Package already exists at ${packageDir}`);
+        process.exit(1);
     }
 
-    if (options.dbPassword) {
-        args.push('--db-password', options.dbPassword);
+    // Auto-generate DATABASE_URL if password provided
+    let databaseUrl = options.databaseUrl;
+    if (options.dbPassword && !databaseUrl) {
+        databaseUrl = `postgresql://postgres.${options.projectId}:${options.dbPassword}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require`;
+        console.log('Auto-generated DATABASE_URL');
     }
 
-    if (options.databaseUrl) {
-        args.push('--database-url', options.databaseUrl);
-    }
+    console.log(`Creating: ${instanceName}`);
+    console.log(`Project ID: ${options.projectId}`);
+    console.log(`URL: ${supabaseUrl}`);
+    if (options.withStripe) console.log('Stripe: Enabled');
+    if (options.withDrizzle) console.log('Drizzle: Enabled');
+    console.log('');
+
+    // Create package structure
+    console.log('Creating package structure...');
+    await fs.mkdirp(path.join(packageDir, 'src'));
+
+    // Create package.json
+    const pkgJson: any = {
+        name: packageName,
+        version: '1.0.0',
+        main: 'dist/index.js',
+        types: 'dist/index.d.ts',
+        scripts: {
+            build: 'tsc',
+            dev: 'tsc --watch',
+            'db:push': 'npx drizzle-kit generate && sleep 3 && npx supabase db push',
+            'db:types': `npx supabase gen types typescript --project-id ${options.projectId} > src/database.types.ts`,
+            'db:generate': 'yarn db:types && despace generate supabase-types ./src/database.types.ts',
+            'db:master': 'yarn db:push && yarn db:generate',
+            'add-stripe': 'despace generate supabase-stripe .',
+            'lint': 'tsc --noEmit && eslint src --ext .ts,.tsx',
+            'drizzle:generate': 'drizzle-kit generate',
+            'drizzle:push': 'drizzle-kit push',
+            'drizzle:studio': 'drizzle-kit studio'
+        },
+        dependencies: {
+            '@supabase/supabase-js': '^2.84.0',
+            'dotenv': '^16.4.5',
+            'postgres': '^3.4.4'
+        },
+        devDependencies: {
+            typescript: '^5.3.0',
+            '@types/node': '^20.12.7',
+            'eslint': '^8.57.0',
+            '@types/eslint': '^8.56.10'
+        }
+    };
 
     if (options.withStripe) {
-        args.push('--with-stripe');
-
-        if (options.stripeSecretKey) {
-            args.push('--stripe-secret-key', options.stripeSecretKey);
-        }
-
-        if (options.stripeWebhookSecret) {
-            args.push('--stripe-webhook-secret', options.stripeWebhookSecret);
-        }
     }
 
     if (options.withDrizzle) {
-        args.push('--with-drizzle');
+        pkgJson.dependencies['drizzle-orm'] = '^0.38.2';
+        pkgJson.devDependencies['drizzle-kit'] = '^0.30.1';
+        // drizzle scripts already added above
     }
 
-    // Execute the script
-    console.log('Creating Supabase package...');
-    console.log('');
+    await fs.writeJson(path.join(packageDir, 'package.json'), pkgJson, { spaces: 2 });
 
+    // Create tsconfig.json
+    const tsConfig = {
+        compilerOptions: {
+            target: 'ES2020',
+            module: 'ESNext',
+            lib: ['ES2020', 'DOM'],
+            declaration: true,
+            outDir: './dist',
+            rootDir: './src',
+            strict: true,
+            esModuleInterop: true,
+            skipLibCheck: true,
+            forceConsistentCasingInFileNames: true,
+            moduleResolution: 'bundler',
+            resolveJsonModule: true
+        },
+        include: ['src/**/*'],
+        exclude: ['node_modules', 'dist']
+    };
+    await fs.writeJson(path.join(packageDir, 'tsconfig.json'), tsConfig, { spaces: 2 });
+
+    // Create .env file (framework-aware)
+    const isVite = options.framework === 'vite';
+    const urlVarName = isVite ? 'VITE_PUBLIC_SUPABASE_URL' : 'NEXT_PUBLIC_SUPABASE_URL';
+    const keyVarName = isVite ? 'VITE_PUBLIC_SUPABASE_ANON_KEY' : 'NEXT_PUBLIC_SUPABASE_ANON_KEY';
+
+    let envContent = `# Supabase ${instanceName} Configuration
+${urlVarName}="${supabaseUrl}"
+${keyVarName}="${options.anonKey}"
+`;
+    if (options.serviceKey) {
+        envContent += `SUPABASE_SERVICE_ROLE_KEY="${options.serviceKey}"\n`;
+    }
+    if (databaseUrl) {
+        envContent += `DATABASE_URL="${databaseUrl}"\n`;
+    }
+    if (options.withStripe) {
+        envContent += `\n# Stripe Configuration\n`;
+        envContent += `STRIPE_SECRET_KEY="${options.stripeSecretKey || ''}"\n`;
+        envContent += `STRIPE_WEBHOOK_SECRET="${options.stripeWebhookSecret || ''}"\n`;
+    }
+    await fs.writeFile(path.join(packageDir, '.env'), envContent);
+
+    // Create .env.example with instructions
+    const envExample = isVite
+        ? generateEnvExampleVite(options.withStripe)
+        : generateEnvExampleNext(options.withStripe);
+    await fs.writeFile(path.join(packageDir, '.env.example'), envExample);
+
+    // Create source files
+    await fs.writeFile(path.join(packageDir, 'src', 'database.types.ts'), DATABASE_TYPES_TEMPLATE);
+    await fs.writeFile(path.join(packageDir, 'src', 'database.service.ts'), DATABASE_SERVICE_TEMPLATE);
+
+    // Create client.ts (framework-aware)
+    const clientTemplate = isVite ? CLIENT_TEMPLATE_VITE : CLIENT_TEMPLATE_NEXT;
+    await fs.writeFile(
+        path.join(packageDir, 'src', 'client.ts'),
+        clientTemplate.replace(/\{\{WORKSPACE_NAME\}\}/g, workspaceInfo.workspaceName)
+    );
+
+    // Create config.ts (framework-aware)
+    const configTemplate = isVite ? CONFIG_TEMPLATE_VITE : CONFIG_TEMPLATE_NEXT;
+    await fs.writeFile(path.join(packageDir, 'src', 'config.ts'), configTemplate);
+
+    // Create env type declarations (framework-aware)
+    const envTemplate = isVite ? VITE_ENV_TEMPLATE : NEXT_ENV_TEMPLATE;
+    const envFileName = isVite ? 'vite-env.d.ts' : 'next-env.d.ts';
+    await fs.writeFile(path.join(packageDir, 'src', envFileName), envTemplate);
+
+    // Create index.ts
+    const indexTemplate = options.withStripe ? INDEX_TEMPLATE_WITH_STRIPE : INDEX_TEMPLATE;
+    const indexContent = indexTemplate.replace(/\{\{WORKSPACE_NAME\}\}/g, workspaceInfo.workspaceName);
+    await fs.writeFile(path.join(packageDir, 'src', 'index.ts'), indexContent);
+
+    // Drizzle setup
+    if (options.withDrizzle) {
+        console.log('Setting up Drizzle ORM...');
+        await fs.mkdirp(path.join(packageDir, 'src', 'db', 'public'));
+
+        // Create basic public schema
+        const publicSchema = `import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+
+export const profiles = pgTable('profiles', {
+  id: uuid('id').primaryKey(),
+  email: text('email'),
+  full_name: text('full_name'),
+  avatar_url: text('avatar_url'),
+  updated_at: timestamp('updated_at').defaultNow(),
+  created_at: timestamp('created_at').defaultNow(),
+});
+`;
+        await fs.writeFile(path.join(packageDir, 'src', 'db', 'public', 'schema.ts'), publicSchema);
+
+        // Create db/schema.ts
+        const dbSchema = `import * as publicSchema from './public/schema';
+
+export const schema = { ...publicSchema };
+`;
+        await fs.writeFile(path.join(packageDir, 'src', 'db', 'schema.ts'), dbSchema);
+
+        // Create drizzle.config.ts
+        const drizzleConfig = `import { config } from 'dotenv';
+import { defineConfig } from 'drizzle-kit';
+
+config({ path: '.env' });
+
+export default defineConfig({
+  schema: './src/db/schema.ts',
+  out: './supabase/migrations',
+  dialect: 'postgresql',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+`;
+        await fs.writeFile(path.join(packageDir, 'drizzle.config.ts'), drizzleConfig);
+    }
+
+    // Create README
+    const readme = `# ${packageName}
+
+Supabase client package for ${instanceName}.
+
+## Setup
+
+1. Install dependencies:
+   \`\`\`bash
+   yarn install
+   \`\`\`
+
+2. Generate database types:
+   \`\`\`bash
+   yarn db:types
+   \`\`\`
+
+3. Build:
+   \`\`\`bash
+   yarn build
+   \`\`\`
+
+## Usage
+
+\`\`\`typescript
+import { createClient } from '${packageName}';
+
+const supabase = createClient();
+\`\`\`
+`;
+    await fs.writeFile(path.join(packageDir, 'README.md'), readme);
+
+    console.log('✓ Package structure created');
+
+    // Install dependencies
+    console.log('Installing dependencies...');
     try {
-        await execa(scriptPath, args, {
-            cwd: workspaceInfo.rootDir,
+        await execa('yarn', ['install'], {
+            cwd: packageDir,
             stdio: 'inherit'
         });
+        console.log('✓ Dependencies installed');
+
+        // Run Stripe generator if enabled
+        if (options.withStripe) {
+            console.log('Running Stripe generator...');
+            await execa('despace', ['generate', 'supabase-stripe', '.'], {
+                cwd: packageDir,
+                stdio: 'inherit'
+            });
+            console.log('✓ Stripe validation complete');
+        }
+
     } catch (error) {
-        console.error('Error creating Supabase package:', error);
-        process.exit(1);
+        console.warn('Warning: Failed to install dependencies. Run yarn install manually.');
     }
+
+    console.log('');
+    console.log(`🎉 Success: ${instanceName}`);
+    console.log('');
+    console.log(`Package: ${packageName}`);
+    console.log(`Location: ${packageDir}`);
+    console.log('');
+    console.log('Next steps:');
+    console.log(`  1. cd ${path.relative(workspaceInfo.rootDir, packageDir)}`);
+    console.log('  2. yarn db:types');
+    console.log('  3. yarn build');
 }
 
 export async function promptSupabaseOptions(name?: string): Promise<CreateSupabaseOptions> {
@@ -146,6 +363,16 @@ export async function promptSupabaseOptions(name?: string): Promise<CreateSupaba
             message: 'Include Drizzle ORM? (automatically enabled with Stripe)',
             default: false,
             when: (answers: any) => !answers.withStripe
+        },
+        {
+            type: 'list',
+            name: 'framework',
+            message: 'Target framework:',
+            choices: [
+                { name: 'Vite', value: 'vite' },
+                { name: 'Next.js', value: 'next' }
+            ],
+            default: 'vite'
         }
     );
 
@@ -162,6 +389,7 @@ export async function promptSupabaseOptions(name?: string): Promise<CreateSupaba
         withStripe: answers.withStripe,
         stripeSecretKey: answers.stripeSecretKey || undefined,
         stripeWebhookSecret: answers.stripeWebhookSecret || undefined,
-        withDrizzle: answers.withStripe || answers.withDrizzle
+        withDrizzle: answers.withStripe || answers.withDrizzle,
+        framework: answers.framework as SupabaseFramework
     };
 }

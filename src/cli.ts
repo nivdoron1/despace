@@ -2,6 +2,8 @@
 
 import { createWorkspace, promptWorkspaceOptions } from './commands/create-workspace';
 import { createSupabase, promptSupabaseOptions } from './commands/create-supabase';
+import { generateSupabaseTypes } from './commands/generate-supabase-types';
+import { generateSupabaseStripe } from './commands/generate-supabase-stripe';
 import type { PackageManager } from './types';
 import { detectPackageManager } from './utils/package-manager';
 
@@ -11,12 +13,16 @@ despace - Supabase workspace CLI
 Usage:
   despace create workspace <name> [options]
   despace create new-supabase <name> [options]
+  despace generate supabase-types <typesPath>
+  despace generate supabase-stripe <targetDir>
   despace --help
   despace --version
 
 Commands:
   create workspace <name>       Create a new Supabase monorepo workspace
   create new-supabase <name>    Create a new Supabase instance in current workspace
+  generate supabase-types       Generate types and services from Supabase types file
+  generate supabase-stripe      Generate Stripe Edge Functions and Service
 
 Options:
   --package-manager <pm>        Package manager to use: yarn or npm (default: yarn)
@@ -125,6 +131,32 @@ What gets created:
   - Optional: Stripe integration with Edge Functions
 `;
 
+const GENERATE_HELP = `
+despace generate supabase-types - Generate types and services from Supabase types file
+
+Usage:
+  despace generate supabase-types <typesPath>
+
+Arguments:
+  <typesPath>                   Path to the database.types.ts file
+
+Example:
+  despace generate supabase-types ./src/database.types.ts
+`;
+
+const STRIPE_HELP = `
+despace generate supabase-stripe - Generate Stripe integration for Supabase
+
+Usage:
+  despace generate supabase-stripe <targetDir>
+
+Arguments:
+  <targetDir>                   Target directory (usually current Supabase package root)
+
+Example:
+  despace generate supabase-stripe .
+`;
+
 function showHelp() {
     console.log(HELP_TEXT);
 }
@@ -137,10 +169,15 @@ function showSupabaseHelp() {
     console.log(SUPABASE_HELP);
 }
 
+function showGenerateHelp() {
+    console.log(GENERATE_HELP);
+    console.log(STRIPE_HELP);
+}
+
 function showVersion() {
     // Read version from package.json
     const pkg = require('../package.json');
-    console.log(`despace v${pkg.version}`);
+    console.log(`despace v\${pkg.version}`);
 }
 
 interface ParsedArgs {
@@ -227,7 +264,7 @@ function parseArgs(args: string[]): ParsedArgs {
             }
             i++;
         } else {
-            console.error(`Unknown option: ${arg}`);
+            console.error(`Unknown option: \${arg}`);
             process.exit(1);
         }
     }
@@ -334,19 +371,56 @@ async function main() {
                     withStripe: parsed.options.withStripe || false,
                     stripeSecretKey: parsed.options.stripeSecretKey,
                     stripeWebhookSecret: parsed.options.stripeWebhookSecret,
-                    withDrizzle: parsed.options.withDrizzle || parsed.options.withStripe || false
+                    withDrizzle: parsed.options.withDrizzle || parsed.options.withStripe || false,
+                    framework: parsed.options.appType || 'next' // Add framework option
                 });
             }
         } else {
-            console.error(`Error: Unknown subcommand: ${parsed.subcommand}`);
+            console.error(`Error: Unknown subcommand: \${parsed.subcommand}`);
             console.error('Valid subcommands: workspace, new-supabase');
             console.error('Run "despace --help" for more information');
             process.exit(1);
         }
+    } else if (parsed.command === 'generate') {
+        if (parsed.subcommand === 'supabase-types') {
+            if (parsed.options.help) {
+                showGenerateHelp();
+                process.exit(0);
+            }
+
+            if (!parsed.name) {
+                console.error('Error: Types path is required');
+                console.error('Usage: despace generate supabase-types <typesPath>');
+                process.exit(1);
+            }
+
+            // parsed.name holds the first positional arg after subcommand, which is typesPath
+            await generateSupabaseTypes(parsed.name);
+        } else if (parsed.subcommand === 'supabase-stripe') {
+             if (parsed.options.help) {
+                console.log(STRIPE_HELP);
+                process.exit(0);
+            }
+
+            if (!parsed.name) {
+                // Default to current directory if not provided, or error?
+                // The help says <targetDir> is argument.
+                // Let's default to '.' if not provided for ease of use?
+                // But safer to require it or default cleanly.
+                // Given the usage 'despace generate supabase-stripe .', user expects to pass it.
+                // But let's allow empty to mean current dir.
+                await generateSupabaseStripe(parsed.name || '.');
+            } else {
+                await generateSupabaseStripe(parsed.name);
+            }
+        } else {
+            console.error(`Error: Unknown subcommand: \${parsed.subcommand}`);
+            console.error('Valid subcommands: supabase-types, supabase-stripe');
+            process.exit(1);
+        }
     } else {
-        console.error(`Error: Unknown command: ${parsed.command}`);
-        console.error('Valid commands: create');
-        console.error('Run "despace --help" for more information');
+        console.error(`Error: Unknown command: \${parsed.command}`);
+        console.error('Valid commands: create, generate');
         process.exit(1);
     }
 }

@@ -8,6 +8,7 @@ import { DATABASE_SERVICE_TEMPLATE } from '../templates/DATABASE_SERVICE_TEMPLAT
 import { DATABASE_TYPES_TEMPLATE } from '../templates/DATABASE_TYPES_TEMPLATE';
 import { GENERATE_TEMPLATE } from '../templates/GENERATE_TEMPLATE';
 import { VITE_ENV_TEMPLATE } from '../templates/VITE_ENV_TEMPLATE';
+import { APP_MAIN_PAGE_TEMPLATE } from '../templates/APP_MAIN_PAGE_TEMPLATE';
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<void> {
     const { workspaceName, packageManager, gitUrl, appType, appName } = options;
@@ -59,7 +60,10 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
         "clean": packageManager === 'yarn'
             ? "yarn workspaces foreach --all run clean || true"
             : "npm run clean --workspaces || true",
-        "new-supabase": "despace create new-supabase"
+        "new-supabase": "despace create new-supabase",
+        "lint": packageManager === 'yarn'
+            ? "yarn workspaces foreach --all run lint"
+            : "npm run lint --workspaces"
     };
 
     pkg.devDependencies = {
@@ -77,10 +81,8 @@ This is a Supabase monorepo workspace generated with \`despace\`.
 
 ## Structure
 
-- \`packages/supabase-core\`: Core Supabase client and types.
 - \`packages/ui\`: Reusable shadcn/ui components (Button, Input, Card, etc.).
 - \`packages/supabase-auth\`: Authentication components with shadcn/ui (Login, Register, useAuth).
-- \`packages/stripe-core\`: Stripe integration and Edge Function generator.
 - \`apps/\`: Application packages (e.g., Vite apps).
 
 ## Getting Started
@@ -116,111 +118,6 @@ See \`despace create new-supabase --help\` for more options.
     await fs.writeFile(path.join(targetDir, 'README.md'), readmeContent);
     console.log('Created README.md');
 
-    // Create supabase-core package
-    const coreDir = path.join(targetDir, 'packages', 'supabase-core');
-    await fs.mkdirp(coreDir);
-
-    // Create supabase-core package.json
-    const corePackageJson = {
-        name: `@${workspaceName}/supabase-core`,
-        version: '1.0.0',
-        description: 'Core Supabase client and types for workspace',
-        main: 'dist/index.js',
-        types: 'dist/index.d.ts',
-        scripts: {
-            build: 'tsc',
-            dev: 'tsc --watch'
-        },
-        keywords: ['supabase', 'client'],
-        license: 'MIT',
-        dependencies: {
-            '@supabase/supabase-js': '^2.84.0'
-        },
-        devDependencies: {
-            typescript: '^5.3.0',
-            vite: '^5.2.0'
-        }
-    };
-    await fs.writeJson(path.join(coreDir, 'package.json'), corePackageJson, { spaces: 4 });
-
-    // Create supabase-core tsconfig.json
-    const coreTsConfig = {
-        compilerOptions: {
-            target: 'ES2020',
-            module: 'ESNext',
-            lib: ['ES2020', 'DOM'],
-            declaration: true,
-            outDir: './dist',
-            rootDir: './src',
-            strict: true,
-            esModuleInterop: true,
-            skipLibCheck: true,
-            forceConsistentCasingInFileNames: true,
-            moduleResolution: 'bundler',
-            resolveJsonModule: true,
-            types: ['vite/client']
-        },
-        include: ['src/**/*'],
-        exclude: ['node_modules', 'dist']
-    };
-    await fs.writeJson(path.join(coreDir, 'tsconfig.json'), coreTsConfig, { spaces: 4 });
-
-    // Create src directory and files
-    const srcDir = path.join(coreDir, 'src');
-    await fs.mkdirp(srcDir);
-
-    // Write database.types.ts
-    await fs.writeFile(path.join(srcDir, 'database.types.ts'), DATABASE_TYPES_TEMPLATE);
-
-    // Write vite-env.d.ts
-    await fs.writeFile(path.join(srcDir, 'vite-env.d.ts'), VITE_ENV_TEMPLATE);
-
-    // Write database.service.ts
-    await fs.writeFile(path.join(srcDir, 'database.service.ts'), DATABASE_SERVICE_TEMPLATE);
-
-    // Write generate.ts
-    await fs.writeFile(path.join(srcDir, 'generate.ts'), GENERATE_TEMPLATE);
-
-    // Write index.ts
-    const indexTs = `
-// Export types
-export * from './database.types';
-
-export * from './database.service';
-
-`;
-    await fs.writeFile(path.join(srcDir, 'index.ts'), indexTs);
-
-    console.log('Created supabase-core package with all files');
-
-    // Create stripe-core package from bundled templates
-    const referenceStripeCorePath = path.join(__dirname, '../../src/templates-data/packages/stripe-core');
-    const targetStripeCorePath = path.join(targetDir, 'packages', 'stripe-core');
-
-    if (await fs.pathExists(referenceStripeCorePath)) {
-        await fs.copy(referenceStripeCorePath, targetStripeCorePath, {
-            filter: (src) => {
-                // Exclude node_modules, dist, and lockfiles
-                const relativePath = path.relative(referenceStripeCorePath, src);
-                return !relativePath.startsWith('node_modules') &&
-                    !relativePath.startsWith('dist') &&
-                    !relativePath.startsWith('.yarn') &&
-                    !relativePath.includes('yarn.lock');
-            }
-        });
-
-        // Update package.json workspace reference
-        const stripePkgPath = path.join(targetStripeCorePath, 'package.json');
-        if (await fs.pathExists(stripePkgPath)) {
-            const stripePkg = await fs.readJson(stripePkgPath);
-            stripePkg.name = `@${workspaceName}/stripe-core`;
-            await fs.writeJson(stripePkgPath, stripePkg, { spaces: 2 });
-        }
-
-        console.log('Created stripe-core package');
-    } else {
-        console.warn('Warning: stripe-core template not found in CLI templates');
-    }
 
     // Create ui package from bundled templates
     const referenceUiPath = path.join(__dirname, '../../src/templates-data/packages/ui');
@@ -349,11 +246,21 @@ export * from './database.service';
         if (await fs.pathExists(stripeUiPkgPath)) {
             const stripeUiPkg = await fs.readJson(stripeUiPkgPath);
             stripeUiPkg.name = `@${workspaceName}/stripe-ui`;
-            // Update ui dependency to use workspace name
+            // Update all dependencies to use the actual workspace name
             if (stripeUiPkg.dependencies) {
-                delete stripeUiPkg.dependencies['@templates-data/ui'];
-                delete stripeUiPkg.dependencies['ui'];
-                stripeUiPkg.dependencies[`@${workspaceName}/ui`] = 'workspace:*';
+                // Replace various template placeholders
+                const oldDeps = { ...stripeUiPkg.dependencies };
+                stripeUiPkg.dependencies = {};
+
+                for (const [depName, version] of Object.entries(oldDeps)) {
+                    let newDepName = depName;
+                    // Replace old workspace names
+                    newDepName = newDepName.replace('@templates-data/', `@${workspaceName}/`);
+                    newDepName = newDepName.replace('@supabase-workspace/', `@${workspaceName}/`);
+                    newDepName = newDepName.replace(/^ui$/, `@${workspaceName}/ui`);
+
+                    stripeUiPkg.dependencies[newDepName] = version;
+                }
             }
             await fs.writeJson(stripeUiPkgPath, stripeUiPkg, { spaces: 2 });
         }
@@ -366,7 +273,9 @@ export * from './database.service';
                 if (file.endsWith('.tsx')) {
                     const filePath = path.join(stripeUiComponentsDir, file);
                     let content = await fs.readFile(filePath, 'utf-8');
-                    content = content.replace(/@templates-data\/ui/g, `@${workspaceName}/ui`);
+                    // Replace all variations of old workspace names
+                    content = content.replace(/@templates-data\//g, `@${workspaceName}/`);
+                    content = content.replace(/@supabase-workspace\//g, `@${workspaceName}/`);
                     content = content.replace(/from ['"]ui['"]/g, `from '@${workspaceName}/ui'`);
                     content = content.replace(/from ['"]ui\//g, `from '@${workspaceName}/ui/`);
                     await fs.writeFile(filePath, content);
@@ -387,7 +296,7 @@ export * from './database.service';
         if (appType === 'next') {
             // Create Next.js app
             console.log(`Creating Next.js app: ${actualAppName}...`);
-            await execa('npx', [
+            const nextAppArgs = [
                 '-y',
                 'create-next-app@latest',
                 actualAppName,
@@ -397,8 +306,11 @@ export * from './database.service';
                 '--app',
                 '--no-src-dir',
                 '--import-alias', '@/*',
-                '--no-git'
-            ], {
+                '--no-git',
+                // Use the correct package manager
+                packageManager === 'yarn' ? '--use-yarn' : '--use-npm'
+            ];
+            await execa('npx', nextAppArgs, {
                 cwd: path.join(targetDir, 'apps'),
                 stdio: 'inherit',
             });
@@ -435,7 +347,7 @@ export * from './database.service';
 
             // Add assistant-ui chat if enabled
             const includeChat = options.includeChat !== false;
-            const chatModel = options.chatModel ?? 'openai';
+            const chatModels = options.chatModels ?? [options.chatModel ?? 'openai'];
             const chatTheme = options.chatTheme ?? 'default';
 
             if (includeChat) {
@@ -446,70 +358,116 @@ export * from './database.service';
                 appPkg.dependencies['@assistant-ui/react-ai-sdk'] = 'latest';
                 appPkg.dependencies['ai'] = 'latest';
 
-                // Add provider-specific SDK
+                // Add provider-specific SDKs for all selected providers
                 const providerSdkMap: Record<string, string> = {
                     openai: '@ai-sdk/openai',
                     anthropic: '@ai-sdk/anthropic',
                     gemini: '@ai-sdk/google',
-                    groq: '@ai-sdk/openai',
+                    groq: '@ai-sdk/openai',  // Groq uses OpenAI-compatible SDK
                     azure: '@ai-sdk/azure',
                     aws: '@ai-sdk/amazon-bedrock',
                     cohere: '@ai-sdk/cohere',
                     ollama: 'ollama-ai-provider-v2'
                 };
 
-                if (providerSdkMap[chatModel]) {
-                    appPkg.dependencies[providerSdkMap[chatModel]] = 'latest';
-                }
-
-                // Components are now provided by the ui package, so we don't need to copy them locally.
-                // We only need to set up the API route.
-
-                // Copy API route template from ui package source
-                const uiPackageApiDir = path.join(__dirname, '../../src/templates-data/packages/ui/api');
-                const appApiRouteDir = path.join(appDir, 'app', 'api', 'chat');
-
-                if (await fs.pathExists(uiPackageApiDir)) {
-                    await fs.mkdirp(appApiRouteDir);
-                    const sourceApiFile = path.join(uiPackageApiDir, `${chatModel}.ts`);
-
-                    if (await fs.pathExists(sourceApiFile)) {
-                        await fs.copy(sourceApiFile, path.join(appApiRouteDir, 'route.ts'));
-                    } else {
-                        console.warn(`Warning: Chat API template for ${chatModel} not found in ui package. Defaulting to openai.`);
-                        // Fallback or error handling if needed
-                        const fallbackFile = path.join(uiPackageApiDir, 'openai.ts');
-                        if (await fs.pathExists(fallbackFile)) {
-                            await fs.copy(fallbackFile, path.join(appApiRouteDir, 'route.ts'));
-                        }
+                // Install SDKs for all selected providers
+                for (const provider of chatModels) {
+                    if (providerSdkMap[provider]) {
+                        appPkg.dependencies[providerSdkMap[provider]] = 'latest';
                     }
                 }
 
-                // Generate .env.example with provider-specific vars
+                // Copy the multi-provider API route from chat package
+                const chatPackageApiDir = path.join(__dirname, '../../src/templates-data/packages/chat/app/api/chat');
+                const appApiRouteDir = path.join(appDir, 'app', 'api', 'chat');
+
+                if (await fs.pathExists(chatPackageApiDir)) {
+                    await fs.mkdirp(appApiRouteDir);
+                    await fs.copy(path.join(chatPackageApiDir, 'route.ts'), path.join(appApiRouteDir, 'route.ts'));
+                } else {
+                    console.warn('Warning: Chat API route template not found');
+                }
+
+                // Generate .env.example with all selected provider vars
                 const envVarsMap: Record<string, string[]> = {
                     openai: ['OPENAI_API_KEY="sk-..."'],
                     anthropic: ['ANTHROPIC_API_KEY="..."'],
                     gemini: ['GOOGLE_GENERATIVE_AI_API_KEY="..."'],
-                    groq: ['GROQ_API_KEY="..."'],
+                    groq: ['GROQ_API_KEY="gsk_..."'],
                     azure: ['AZURE_RESOURCE_NAME="..."', 'AZURE_API_KEY="..."'],
                     aws: ['AWS_ACCESS_KEY_ID="..."', 'AWS_SECRET_ACCESS_KEY="..."', 'AWS_REGION="..."'],
                     cohere: ['COHERE_API_KEY="..."'],
                     ollama: ['# No API key required for Ollama (local)']
                 };
 
-                const envContent = `# ${chatModel.toUpperCase()} Chat API Configuration
-${(envVarsMap[chatModel] || []).join('\n')}
+                // Collect env vars for all selected providers
+                const allEnvVars: string[] = [];
+                for (const provider of chatModels) {
+                    if (envVarsMap[provider]) {
+                        allEnvVars.push(`# ${provider.charAt(0).toUpperCase() + provider.slice(1)}`);
+                        allEnvVars.push(...envVarsMap[provider]);
+                        allEnvVars.push('');
+                    }
+                }
 
+                const envContent = `# Chat API Configuration
+# Selected providers: ${chatModels.join(', ')}
+
+${allEnvVars.join('\n')}
 # Optional: Assistant UI Cloud for persistence
 # NEXT_PUBLIC_ASSISTANT_BASE_URL="https://..."
 `;
                 await fs.writeFile(path.join(appDir, '.env.example'), envContent);
                 await fs.writeFile(path.join(appDir, '.env.local'), envContent);
 
-                console.log(`Added chat with ${chatModel} provider (${chatTheme} theme)`);
+                console.log(`Added chat with ${chatModels.length} provider(s): ${chatModels.join(', ')} (${chatTheme} theme)`);
             }
 
             await fs.writeJson(appPkgPath, appPkg, { spaces: 2 });
+
+            // Overwrite Next.js page.tsx with template
+            const mainPageContent = APP_MAIN_PAGE_TEMPLATE
+                .replace(/@WORKSPACE_NAME_PLACEHOLDER@/g, `@${workspaceName}`);
+            await fs.writeFile(path.join(appDir, 'app', 'page.tsx'), mainPageContent);
+
+            // Update next.config.ts to handle @/ imports from UI package
+            const nextConfigPath = path.join(appDir, 'next.config.ts');
+            const nextConfigContent = `import type { NextConfig } from "next";
+import path from "path";
+
+const uiPackagePath = path.resolve(__dirname, "../../packages/ui");
+
+const nextConfig: NextConfig = {
+  /* config options here */
+  transpilePackages: ["@${workspaceName}/ui"],
+  // Webpack configuration for @/ path alias resolution from UI package
+  // Note: We use webpack instead of turbopack because turbopack doesn't 
+  // properly handle @/ path aliases from external packages in monorepos
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@/lib": path.resolve(uiPackagePath, "lib"),
+      "@/hooks": path.resolve(uiPackagePath, "hooks"),
+      "@/components": path.resolve(uiPackagePath, "components"),
+    };
+    return config;
+  },
+  // Empty turbopack config to silence warning when using --webpack flag
+  turbopack: {},
+};
+
+export default nextConfig;
+`;
+            await fs.writeFile(nextConfigPath, nextConfigContent);
+            console.log('Updated next.config.ts with UI package alias configuration');
+
+            // Update package.json to use --webpack flag in dev script
+            const appPkgForDevScript = await fs.readJson(appPkgPath);
+            if (appPkgForDevScript.scripts && appPkgForDevScript.scripts.dev === 'next dev') {
+                appPkgForDevScript.scripts.dev = 'next dev --webpack';
+                await fs.writeJson(appPkgPath, appPkgForDevScript, { spaces: 2 });
+                console.log('Updated dev script to use webpack bundler');
+            }
 
         } else if (appType === 'vite') {
             // Create Vite app
@@ -550,6 +508,11 @@ ${(envVarsMap[chatModel] || []).join('\n')}
             appPkg.dependencies = appPkg.dependencies || {};
             appPkg.dependencies[`@${workspaceName}/ui`] = 'workspace:*';
             await fs.writeJson(appPkgPath, appPkg, { spaces: 2 });
+
+            // Overwrite Vite App.tsx with template
+            const mainPageContent = APP_MAIN_PAGE_TEMPLATE
+                .replace(/@WORKSPACE_NAME_PLACEHOLDER@/g, `@${workspaceName}`);
+            await fs.writeFile(path.join(appDir, 'src', 'App.tsx'), mainPageContent);
         }
     }
 
@@ -560,22 +523,6 @@ ${(envVarsMap[chatModel] || []).join('\n')}
     console.log('');
     console.log('🔨 Building packages...');
 
-    // Build supabase-core
-    console.log('Building supabase-core...');
-    await pmUtil.run(pmUtil.getBuildCommand(), {
-        cwd: path.join(targetDir, 'packages', 'supabase-core'),
-        stdio: 'inherit'
-    });
-
-    // Build stripe-core if it exists
-    const buildStripeCorePath = path.join(targetDir, 'packages', 'stripe-core');
-    if (await fs.pathExists(buildStripeCorePath)) {
-        console.log('Building stripe-core...');
-        await pmUtil.run(pmUtil.getBuildCommand(), {
-            cwd: buildStripeCorePath,
-            stdio: 'inherit'
-        });
-    }
 
     // Build ui if it exists (must be before supabase-auth)
     const buildUiPath = path.join(targetDir, 'packages', 'ui');
@@ -659,11 +606,11 @@ export async function promptWorkspaceOptions(workspaceName: string): Promise<Cre
             when: (answers: any) => answers.appType === 'next'
         },
         {
-            type: 'list',
-            name: 'chatModel',
-            message: 'Select chat model provider:',
+            type: 'checkbox',
+            name: 'chatModels',
+            message: 'Select chat providers (multi-select with space, enter to confirm):',
             choices: [
-                { name: 'OpenAI (GPT-4)', value: 'openai' },
+                { name: 'OpenAI (GPT-4)', value: 'openai', checked: true },
                 { name: 'Anthropic (Claude)', value: 'anthropic' },
                 { name: 'Google (Gemini)', value: 'gemini' },
                 { name: 'Groq (Llama)', value: 'groq' },
@@ -672,8 +619,8 @@ export async function promptWorkspaceOptions(workspaceName: string): Promise<Cre
                 { name: 'Cohere', value: 'cohere' },
                 { name: 'Ollama (Local)', value: 'ollama' }
             ],
-            default: 'openai',
-            when: (answers: any) => answers.includeChat === true
+            when: (answers: any) => answers.includeChat === true,
+            validate: (answer: any[]) => answer.length > 0 ? true : 'Please select at least one provider'
         },
         {
             type: 'list',
@@ -696,7 +643,8 @@ export async function promptWorkspaceOptions(workspaceName: string): Promise<Cre
         appType: answers.appType,
         appName: answers.appName,
         includeChat: answers.includeChat ?? (answers.appType !== 'next' ? false : true),
-        chatModel: answers.chatModel ?? 'openai',
+        chatModels: answers.chatModels ?? ['openai'],
+        chatModel: answers.chatModels?.[0] ?? 'openai',  // Primary model for backwards compat
         chatTheme: answers.chatTheme ?? 'default'
     };
 }

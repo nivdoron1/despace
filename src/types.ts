@@ -10,9 +10,12 @@ export interface CreateWorkspaceOptions {
     appType: AppType;
     appName?: string;
     includeChat?: boolean;
-    chatModel?: ChatModel;
+    chatModel?: ChatModel;  // Single model (backwards compat)
+    chatModels?: ChatModel[];  // Multi-select support
     chatTheme?: ChatTheme;
 }
+
+export type SupabaseFramework = 'vite' | 'next';
 
 export interface CreateSupabaseOptions {
     name: string;
@@ -25,6 +28,7 @@ export interface CreateSupabaseOptions {
     stripeSecretKey?: string;
     stripeWebhookSecret?: string;
     withDrizzle: boolean;
+    framework: SupabaseFramework;
 }
 
 export interface WorkspaceInfo {

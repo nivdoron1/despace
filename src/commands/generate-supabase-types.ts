@@ -1,32 +1,6 @@
-/* eslint-disable */
-// @ts-nocheck
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const supabase_workspace_name = path.basename(path.resolve(__dirname, '../../../'));
-
-// Get types path from command line argument or use default
-const typesPathArg = process.argv[2];
-if (!typesPathArg) {
-    console.error('❌ Error: Types path argument is required');
-    console.error('Usage: node generate.js <path-to-types.ts>');
-    process.exit(1);
-}
-
-// Resolve the absolute path to the types file
-const typesFilePath = path.isAbsolute(typesPathArg)
-    ? typesPathArg
-    : path.resolve(process.cwd(), typesPathArg);
-
-if (!fs.existsSync(typesFilePath)) {
-    console.error(`❌ Error: Types file not found at ${typesFilePath}`);
-    process.exit(1);
-}
-
-const outputBasePath = path.join(process.cwd(), 'src/lib/api'); // Output to current package's src/lib/api
+import path from 'path';
+import fs from 'fs-extra';
+import { findWorkspaceRoot } from '../utils/workspace-detector';
 
 interface RelationshipInfo {
     targetTable: string;
@@ -34,7 +8,7 @@ interface RelationshipInfo {
     foreignKey: string; // The foreign key constraint name
 }
 
-function extractTableAndViewNamesFromTypes(): Record<string, boolean> {
+function extractTableAndViewNamesFromTypes(typesFilePath: string): Record<string, boolean> {
     try {
         const content = fs.readFileSync(typesFilePath, 'utf8');
 
@@ -91,7 +65,7 @@ function extractTableAndViewNamesFromTypes(): Record<string, boolean> {
     }
 }
 
-function extractRelationshipsFromTypes(): Record<string, RelationshipInfo[]> {
+function extractRelationshipsFromTypes(typesFilePath: string): Record<string, RelationshipInfo[]> {
     try {
         const content = fs.readFileSync(typesFilePath, 'utf8');
 
@@ -111,8 +85,7 @@ function extractRelationshipsFromTypes(): Record<string, RelationshipInfo[]> {
         let insideRelationships = false;
         let depth = 0;
         let insideRelationshipObject = false;
-        let currentRelationship: Partial<RelationshipInfo & { foreignKeyName: string }> =
-            {};
+        let currentRelationship: Partial<RelationshipInfo & { foreignKeyName: string }> = {};
 
         for (const line of lines) {
             const trimmedLine = line.trim();
@@ -227,11 +200,6 @@ function extractRelationshipsFromTypes(): Record<string, RelationshipInfo[]> {
     }
 }
 
-// Example: Get all table names from the Database type
-const tableNames: Record<string, boolean> = extractTableAndViewNamesFromTypes();
-const relationships: Record<string, RelationshipInfo[]> =
-    extractRelationshipsFromTypes();
-
 // Util to write a file with content
 function writeFile(folderPath: string, fileName: string, content: string) {
     const filePath = path.join(folderPath, fileName);
@@ -243,68 +211,106 @@ function writeFile(folderPath: string, fileName: string, content: string) {
     console.log(`✅ Created ${filePath}`);
 }
 
-// Template for types.ts with relationships
-function typesTemplate(tableName: string, isViews?: boolean) {
-    const cap = capitalize(tableName);
-    const tableRelationships = relationships[tableName] || [];
+// Capitalize helper
+function capitalize(str: string) {
+    return str
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join('');
+}
 
-    // Generate relationship type definitions
-    const relationshipTypes = tableRelationships
-        .map((rel) => {
-            const relationshipType = rel.isArray
-                ? `Tables<'${rel.targetTable}'>[]`
-                : `Tables<'${rel.targetTable}'> | null`;
+// camelCase helper
+function camelCase(str: string) {
+    const pascal = capitalize(str);
+    return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+}
 
-            // Use target table name as property name instead of foreign key name
-            const propertyName = rel.isArray ? rel.targetTable : rel.targetTable;
+export async function generateSupabaseTypes(typesPathArg: string): Promise<void> {
+    // 1. Resolve types file path
+    const typesFilePath = path.isAbsolute(typesPathArg)
+        ? typesPathArg
+        : path.resolve(process.cwd(), typesPathArg);
 
-            return `  ${propertyName}?: ${relationshipType};`;
-        })
-        .join('\n');
-
-    const hasRelationships = relationshipTypes.length > 0;
-
-    if (isViews) {
-        const baseType = `import type { Tables } from '../../../types';
-
-export type ${cap} = Tables<'${tableName}'>`;
-
-        if (hasRelationships) {
-            return `${baseType} & {
-${relationshipTypes}
-};`;
-        } else {
-            return `${baseType};`;
-        }
+    if (!fs.existsSync(typesFilePath)) {
+        console.error(`❌ Error: Types file not found at ${typesFilePath}`);
+        process.exit(1);
     }
 
-    const baseTypes = `import type { Tables, TablesInsert, TablesUpdate } from '../../../types';
+    // 2. Get workspace name for imports
+    const workspaceInfo = await findWorkspaceRoot();
+    if (!workspaceInfo) {
+        console.error('❌ Error: Could not determine workspace root. Are you in a despace workspace?');
+        process.exit(1);
+    }
+    const supabase_workspace_name = workspaceInfo.workspaceName;
+
+    const outputBasePath = path.join(process.cwd(), 'src/lib/api'); // Output to current package's src/lib/api
+
+    // 3. Extract metadata
+    const tableNames = extractTableAndViewNamesFromTypes(typesFilePath);
+    const relationships = extractRelationshipsFromTypes(typesFilePath);
+
+    // 4. Templates
+    // Template for types.ts with relationships
+    function typesTemplate(tableName: string, isViews?: boolean) {
+        const cap = capitalize(tableName);
+        const tableRelationships = relationships[tableName] || [];
+
+        // Generate relationship type definitions
+        const relationshipTypes = tableRelationships
+            .map((rel) => {
+                const relationshipType = rel.isArray
+                    ? `Tables<'${rel.targetTable}'>[]`
+                    : `Tables<'${rel.targetTable}'> | null`;
+
+                // Use target table name as property name instead of foreign key name
+                const propertyName = rel.isArray ? rel.targetTable : rel.targetTable;
+
+                return `  ${propertyName}?: ${relationshipType};`;
+            })
+            .join('\n');
+
+        const hasRelationships = relationshipTypes.length > 0;
+
+        if (isViews) {
+            const baseType = `import type { Tables } from '../../../database.types';
 
 export type ${cap} = Tables<'${tableName}'>`;
 
-    const insertUpdateTypes = `export type ${cap}Insert = TablesInsert<'${tableName}'>;
+            if (hasRelationships) {
+                return `${baseType} & {
+${relationshipTypes}
+};`;
+            } else {
+                return `${baseType};`;
+            }
+        }
+
+        const baseTypes = `import type { Tables, TablesInsert, TablesUpdate } from '../../../database.types';
+
+export type ${cap} = Tables<'${tableName}'>`;
+
+        const insertUpdateTypes = `export type ${cap}Insert = TablesInsert<'${tableName}'>;
 export type ${cap}Update = TablesUpdate<'${tableName}'>;`;
 
-    if (hasRelationships) {
-        return `${baseTypes} & {
+        if (hasRelationships) {
+            return `${baseTypes} & {
 ${relationshipTypes}
 };
 
 ${insertUpdateTypes}`;
-    } else {
-        return `${baseTypes};
+        } else {
+            return `${baseTypes};
 
 ${insertUpdateTypes}`;
+        }
     }
-}
 
-// --- TEMPLATES UPDATED ---
+    // Template for service.ts (Pure Function Style)
+    function serviceTemplate(tableName: string) {
+        const serviceName = camelCase(tableName) + 'Service'; // e.g., driveWatchesService
 
-// NEW: Template for service.ts (Pure Function Style)
-function serviceTemplate(tableName: string) {
-    const serviceName = camelCase(tableName) + 'Service'; // e.g., driveWatchesService
-
-    return `import { SupabaseService } from '@${supabase_workspace_name}/supabase-core';
+        return `import { SupabaseService } from '@${supabase_workspace_name}/supabase-core';
 import { supabase } from '../../../client';
 
 /**
@@ -333,30 +339,9 @@ export const ${serviceName} = {
   // --- End custom methods ---
 };
 `;
-}
+    }
 
-// REMOVED: engineTemplate function
-
-// --- HELPERS UPDATED ---
-
-// Capitalize helper
-function capitalize(str: string) {
-    return str
-        .split('_')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('');
-}
-
-// NEW: camelCase helper
-function camelCase(str: string) {
-    const pascal = capitalize(str);
-    return pascal.charAt(0).toLowerCase() + pascal.slice(1);
-}
-
-// --- GENERATOR UPDATED ---
-
-// Main generator
-function generate() {
+    // 5. Generate files
     if (!fs.existsSync(outputBasePath)) {
         fs.mkdirSync(outputBasePath, { recursive: true });
     }
@@ -375,17 +360,10 @@ function generate() {
             typesTemplate(tableName, isView)
         );
         writeFile(folderPath, 'service.ts', serviceTemplate(tableName));
-        // REMOVED: writeFile(folderPath, 'engine.ts', engineTemplate(tableName));
 
         // For index.ts
-        serviceImports.push(`export * from './${tableName}/service';`); // UPDATED
+        serviceImports.push(`export * from './${tableName}/service';`);
     }
-
-    // Generate index.ts
-    const indexContent = [...serviceImports].join('\n');
-    writeFile(outputBasePath, 'index.ts', indexContent);
 
     console.log('🎉 Generation complete with relationships!');
 }
-
-generate();
