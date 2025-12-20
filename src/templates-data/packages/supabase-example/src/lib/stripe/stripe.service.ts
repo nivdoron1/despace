@@ -1,5 +1,4 @@
 import { createStripeService } from '@supabase-workspace/stripe-core';
-import { Stripe } from 'stripe';
 
 /**
  * A pre-configured service object for interacting

@@ -12,6 +12,7 @@ import { INDEX_TEMPLATE, INDEX_TEMPLATE_WITH_STRIPE } from '../templates/INDEX_T
 import { VITE_ENV_TEMPLATE } from '../templates/VITE_ENV_TEMPLATE';
 import { NEXT_ENV_TEMPLATE } from '../templates/NEXT_ENV_TEMPLATE';
 import { generateEnvExampleVite, generateEnvExampleNext } from '../templates/ENV_EXAMPLE_TEMPLATE';
+import { ESLINT_CONFIG_TEMPLATE } from '../templates/ESLINT_CONFIG_TEMPLATE';
 
 export async function createSupabase(options: CreateSupabaseOptions): Promise<void> {
     // Find workspace root
@@ -78,7 +79,7 @@ export async function createSupabase(options: CreateSupabaseOptions): Promise<vo
             'db:generate': 'yarn db:types && despace generate supabase-types ./src/database.types.ts',
             'db:master': 'yarn db:push && yarn db:generate',
             'add-stripe': 'despace generate supabase-stripe .',
-            'lint': 'tsc --noEmit && eslint src --ext .ts,.tsx',
+            'lint': 'tsc --noEmit && eslint .',
             'drizzle:generate': 'drizzle-kit generate',
             'drizzle:push': 'drizzle-kit push',
             'drizzle:studio': 'drizzle-kit studio'
@@ -89,10 +90,14 @@ export async function createSupabase(options: CreateSupabaseOptions): Promise<vo
             'postgres': '^3.4.4'
         },
         devDependencies: {
-            typescript: '^5.3.0',
+            '@eslint/js': '^9.39.2',
+            '@types/eslint': '^8.56.10',
             '@types/node': '^20.12.7',
+            'drizzle-kit': '^0.30.1',
             'eslint': '^8.57.0',
-            '@types/eslint': '^8.56.10'
+            'globals': '^16.5.0',
+            'typescript': '^5.3.0',
+            'typescript-eslint': '^8.50.0'
         }
     };
 
@@ -127,6 +132,9 @@ export async function createSupabase(options: CreateSupabaseOptions): Promise<vo
         exclude: ['node_modules', 'dist']
     };
     await fs.writeJson(path.join(packageDir, 'tsconfig.json'), tsConfig, { spaces: 2 });
+
+    // Create eslint.config.js
+    await fs.writeFile(path.join(packageDir, 'eslint.config.js'), ESLINT_CONFIG_TEMPLATE);
 
     // Create .env file (framework-aware)
     const isVite = options.framework === 'vite';

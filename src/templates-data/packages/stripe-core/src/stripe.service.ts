@@ -217,6 +217,7 @@ export function createStripeService(
 
     const stripe = new Stripe(secretKey, {
         typescript: true,
+        apiVersion: apiVersion,
     });
 
     // 2. Return Bound Methods

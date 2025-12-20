@@ -224,6 +224,7 @@ export function createStripeService(
 
     const stripe = new Stripe(secretKey, {
         typescript: true,
+        apiVersion: apiVersion,
     });
 
     // 2. Return Bound Methods
@@ -326,7 +327,6 @@ export interface PaginationParams {
 `;
 
 export const STRIPE_SERVICE_TEMPLATE = `import { createStripeService } from './core';
-import { Stripe } from 'stripe';
 
 /**
  * A pre-configured service object for interacting
