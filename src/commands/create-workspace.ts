@@ -32,6 +32,27 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     // Initialize package manager workspace
     await pmUtil.run(pmUtil.getInitCommand(), { cwd: targetDir, stdio: 'inherit' });
 
+    // Configure Yarn if selected
+    if (packageManager === 'yarn') {
+        const yarnRcContent = `nodeLinker: node-modules
+`;
+        await fs.writeFile(path.join(targetDir, '.yarnrc.yml'), yarnRcContent);
+        console.log('Created .yarnrc.yml with nodeLinker: node-modules');
+    }
+
+    // Create root .gitignore
+    const gitIgnoreContent = `node_modules
+.DS_Store
+dist
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+`;
+    await fs.writeFile(path.join(targetDir, '.gitignore'), gitIgnoreContent);
+    console.log('Created root .gitignore');
+
     // Configure root package.json
     const pkgPath = path.join(targetDir, 'package.json');
     const pkg = await fs.readJson(pkgPath);
@@ -513,6 +534,80 @@ export default nextConfig;
             const mainPageContent = APP_MAIN_PAGE_TEMPLATE
                 .replace(/@WORKSPACE_NAME_PLACEHOLDER@/g, `@${workspaceName}`);
             await fs.writeFile(path.join(appDir, 'src', 'App.tsx'), mainPageContent);
+
+            // Add assistant-ui chat if enabled
+            const includeChat = options.includeChat !== false;
+            const chatModels = options.chatModels ?? [options.chatModel ?? 'openai'];
+            const chatTheme = options.chatTheme ?? 'default';
+
+            if (includeChat) {
+                console.log('Adding assistant-ui chat components to Vite app...');
+
+                // Add assistant-ui dependencies
+                appPkg.dependencies['@assistant-ui/react'] = 'latest';
+                appPkg.dependencies['@assistant-ui/react-ai-sdk'] = 'latest';
+                appPkg.dependencies['ai'] = 'latest';
+
+                // Add provider-specific SDKs
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const providerSdkMap: Record<string, string> = {
+                    openai: '@ai-sdk/openai',
+                    anthropic: '@ai-sdk/anthropic',
+                    gemini: '@ai-sdk/google',
+                    groq: '@ai-sdk/openai',
+                    azure: '@ai-sdk/azure',
+                    aws: '@ai-sdk/amazon-bedrock',
+                    cohere: '@ai-sdk/cohere',
+                    ollama: 'ollama-ai-provider-v2'
+                };
+
+                for (const provider of chatModels) {
+                    if (providerSdkMap[provider]) {
+                        appPkg.dependencies[providerSdkMap[provider]] = 'latest';
+                    }
+                }
+
+                // Generate .env.example
+                const envVarsMap: Record<string, string[]> = {
+                    openai: ['VITE_OPENAI_API_KEY="sk-..."'],
+                    anthropic: ['VITE_ANTHROPIC_API_KEY="..."'],
+                    gemini: ['VITE_GOOGLE_GENERATIVE_AI_API_KEY="..."'],
+                    groq: ['VITE_GROQ_API_KEY="gsk_..."'],
+                    azure: ['VITE_AZURE_RESOURCE_NAME="..."', 'VITE_AZURE_API_KEY="..."'],
+                    aws: ['VITE_AWS_ACCESS_KEY_ID="..."', 'VITE_AWS_SECRET_ACCESS_KEY="..."', 'VITE_AWS_REGION="..."'],
+                    cohere: ['VITE_COHERE_API_KEY="..."'],
+                    ollama: ['# No API key required for Ollama (local)']
+                };
+
+                const allEnvVars: string[] = [];
+                for (const provider of chatModels) {
+                    if (envVarsMap[provider]) {
+                        allEnvVars.push(`# ${provider.charAt(0).toUpperCase() + provider.slice(1)}`);
+                        allEnvVars.push(...envVarsMap[provider]);
+                        allEnvVars.push('');
+                    }
+                }
+
+                const envContent = `# Chat API Configuration
+# Selected providers: ${chatModels.join(', ')}
+
+${allEnvVars.join('\n')}
+# Note: For Vite apps, you typically need a backend (like Supabase Edge Functions) 
+# to securely call LLM APIs instead of exposing keys in the client.
+`;
+                await fs.writeFile(path.join(appDir, '.env.example'), envContent);
+                await fs.writeFile(path.join(appDir, '.env'), envContent); // Vite uses .env
+
+                console.log(`Added chat dependencies with ${chatModels.length} provider(s)`);
+            }
+
+            // Ensure lint script exists
+            appPkg.scripts = appPkg.scripts || {};
+            if (!appPkg.scripts.lint) {
+                appPkg.scripts.lint = "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0";
+            }
+
+            await fs.writeJson(appPkgPath, appPkg, { spaces: 2 });
         }
     }
 
@@ -603,7 +698,7 @@ export async function promptWorkspaceOptions(workspaceName: string): Promise<Cre
             name: 'includeChat',
             message: 'Include assistant-ui chat components?',
             default: true,
-            when: (answers: any) => answers.appType === 'next'
+            when: (answers: any) => answers.appType === 'next' || answers.appType === 'vite'
         },
         {
             type: 'checkbox',
@@ -642,7 +737,7 @@ export async function promptWorkspaceOptions(workspaceName: string): Promise<Cre
         gitUrl: answers.gitUrl,
         appType: answers.appType,
         appName: answers.appName,
-        includeChat: answers.includeChat ?? (answers.appType !== 'next' ? false : true),
+        includeChat: answers.includeChat ?? ((answers.appType === 'next' || answers.appType === 'vite') ? true : false),
         chatModels: answers.chatModels ?? ['openai'],
         chatModel: answers.chatModels?.[0] ?? 'openai',  // Primary model for backwards compat
         chatTheme: answers.chatTheme ?? 'default'
