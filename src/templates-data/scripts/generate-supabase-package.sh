@@ -63,8 +63,8 @@ DB_PASSWORD=""
 DATABASE_URL=""
 WITH_STRIPE=false
 WITH_DRIZZLE=false
-STRIPE_SECRET_KEY=""
-STRIPE_WEBHOOK_SECRET=""
+VITE_PUBLIC_STRIPE_SECRET_KEY=""
+VITE_PUBLIC_STRIPE_WEBHOOK_SECRET=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -74,8 +74,8 @@ while [[ $# -gt 0 ]]; do
         --db-password) DB_PASSWORD="$2"; shift 2 ;;
         --database-url) DATABASE_URL="$2"; shift 2 ;;
         --with-stripe) WITH_STRIPE=true; WITH_DRIZZLE=true; shift ;;
-        --stripe-secret-key) STRIPE_SECRET_KEY="$2"; shift 2 ;;
-        --stripe-webhook-secret) STRIPE_WEBHOOK_SECRET="$2"; shift 2 ;;
+        --stripe-secret-key) VITE_PUBLIC_STRIPE_SECRET_KEY="$2"; shift 2 ;;
+        --stripe-webhook-secret) VITE_PUBLIC_STRIPE_WEBHOOK_SECRET="$2"; shift 2 ;;
         --with-drizzle) WITH_DRIZZLE=true; shift ;;
         -h|--help) show_usage ;;
         *) echo -e "${RED}Unknown argument: $1${NC}"; show_usage ;;
@@ -214,7 +214,7 @@ echo "Location: $PACKAGE_DIR"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. cd $PACKAGE_DIR"
-[ -z "$STRIPE_SECRET_KEY" ] && [ "$WITH_STRIPE" = true ] && echo "  2. Set STRIPE_SECRET_KEY in .env"
+[ -z "$VITE_PUBLIC_STRIPE_SECRET_KEY" ] && [ "$WITH_STRIPE" = true ] && echo "  2. Set VITE_PUBLIC_STRIPE_SECRET_KEY in .env"
 [ -z "$DATABASE_URL" ] && [ "$WITH_DRIZZLE" = true ] && echo "  3. Set DATABASE_URL in .env"
 [ "$WITH_DRIZZLE" = true ] && echo "  4. Run: yarn drizzle:generate"
 echo "  5. Run: yarn build"

@@ -8,7 +8,7 @@ import { createStripeService } from '@supabase-workspace/stripe-core';
  */
 export const stripeService = {
   ...createStripeService({
-    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    secretKey: process.env.VITE_PUBLIC_STRIPE_SECRET_KEY || '',
   }),
 
   // --- Add custom methods below ---

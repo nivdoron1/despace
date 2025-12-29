@@ -159,8 +159,8 @@ ${keyVarName}="${options.anonKey}"
     }
     if (options.withStripe) {
         envContent += `\n# Stripe Configuration\n`;
-        envContent += `STRIPE_SECRET_KEY="${options.stripeSecretKey || ''}"\n`;
-        envContent += `STRIPE_WEBHOOK_SECRET="${options.stripeWebhookSecret || ''}"\n`;
+        envContent += `VITE_PUBLIC_STRIPE_SECRET_KEY="${options.stripeSecretKey || ''}"\n`;
+        envContent += `VITE_PUBLIC_STRIPE_WEBHOOK_SECRET="${options.stripeWebhookSecret || ''}"\n`;
     }
     await fs.writeFile(path.join(packageDir, '.env'), envContent);
 

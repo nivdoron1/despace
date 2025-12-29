@@ -5,9 +5,9 @@ Supabase client and types for example instance.
 ## Usage
 
 ```typescript
-import { supabase, FRONTEND_URL } from '@supabase-workspace/supabase-example';
+import { FRONTEND_URL, supabase } from "@supabase-workspace/supabase-example";
 
-const { data } = await supabase.from('table').select('*');
+const { data } = await supabase.from("table").select("*");
 ```
 
 ## Environment Variables
@@ -18,8 +18,8 @@ const { data } = await supabase.from('table').select('*');
 
 ## Stripe
 
-- \`STRIPE_SECRET_KEY\` - Stripe secret key
-- \`STRIPE_WEBHOOK_SECRET\` - Webhook secret
+- \`VITE_PUBLIC_STRIPE_SECRET_KEY\` - Stripe secret key
+- \`VITE_PUBLIC_STRIPE_WEBHOOK_SECRET\` - Webhook secret
 
 Run \`yarn add-stripe\` to generate Edge Functions.
 
@@ -28,6 +28,7 @@ Run \`yarn add-stripe\` to generate Edge Functions.
 - \`DATABASE_URL\` - PostgreSQL connection URL
 
 Commands:
+
 - \`yarn drizzle:generate\` - Generate migrations
 - \`yarn drizzle:push\` - Push to database
 - \`yarn drizzle:studio\` - Open Drizzle Studio

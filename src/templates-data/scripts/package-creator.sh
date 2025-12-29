@@ -94,8 +94,8 @@ EOF
 
 ## Stripe
 
-- \`STRIPE_SECRET_KEY\` - Stripe secret key
-- \`STRIPE_WEBHOOK_SECRET\` - Webhook secret
+- \`VITE_PUBLIC_STRIPE_SECRET_KEY\` - Stripe secret key
+- \`VITE_PUBLIC_STRIPE_WEBHOOK_SECRET\` - Webhook secret
 
 Run \`yarn add-stripe\` to generate Edge Functions.
 EOF
@@ -127,8 +127,8 @@ EOF
 
     if [ "$WITH_STRIPE" = true ]; then
         cat >> "$PACKAGE_DIR/.env.example" << 'EOF'
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+VITE_PUBLIC_STRIPE_SECRET_KEY=sk_live_...
+VITE_PUBLIC_STRIPE_WEBHOOK_SECRET=whsec_...
 EOF
     fi
 
@@ -149,8 +149,8 @@ EOF
     
     if [ "$WITH_STRIPE" = true ]; then
         echo "" >> "$PACKAGE_DIR/.env"
-        echo "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" >> "$PACKAGE_DIR/.env"
-        echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}" >> "$PACKAGE_DIR/.env"
+        echo "VITE_PUBLIC_STRIPE_SECRET_KEY=${VITE_PUBLIC_STRIPE_SECRET_KEY:-}" >> "$PACKAGE_DIR/.env"
+        echo "VITE_PUBLIC_STRIPE_WEBHOOK_SECRET=${VITE_PUBLIC_STRIPE_WEBHOOK_SECRET:-}" >> "$PACKAGE_DIR/.env"
     fi
     
     if [ "$WITH_DRIZZLE" = true ]; then
@@ -212,8 +212,8 @@ EOF
 
     if [ "$WITH_STRIPE" = true ]; then
         cat >> "$PACKAGE_DIR/src/vite-env.d.ts" << 'EOF'
-  readonly STRIPE_SECRET_KEY: string
-  readonly STRIPE_WEBHOOK_SECRET: string
+  readonly VITE_PUBLIC_STRIPE_SECRET_KEY: string
+  readonly VITE_PUBLIC_STRIPE_WEBHOOK_SECRET: string
 EOF
     fi
 

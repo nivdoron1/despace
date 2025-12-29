@@ -172,14 +172,14 @@ function extractRelationshipsFromTypes(typesFilePath: string): Record<string, Re
 }
 
 // Util to write a file with content
-function writeFile(folderPath: string, fileName: string, content: string) {
+function writeFile(folderPath: string, fileName: string, content: string, overwrite = false) {
     const filePath = path.join(folderPath, fileName);
-    if (fs.existsSync(filePath)) {
+    if (!overwrite && fs.existsSync(filePath)) {
         console.log(`⏩ Skipped (already exists): ${filePath}`);
         return;
     }
     fs.writeFileSync(filePath, content, 'utf8');
-    console.log(`✅ Created ${filePath}`);
+    console.log(`✅ ${overwrite && fs.existsSync(filePath) ? 'Updated' : 'Created'} ${filePath}`);
 }
 
 // Capitalize helper
@@ -435,6 +435,26 @@ export const ${serviceName} = {
 
         writeFile(folderPath, `${tableName}.types.ts`, typesTemplate(table));
         writeFile(folderPath, 'service.ts', serviceTemplate(tableName));
+        writeFile(folderPath, 'index.ts', `export * from './service';\nexport * from './${tableName}.types';\n`, true);
+    }
+
+    // 5.1 Generate lib/api/index.ts
+    const apiIndexContent = tableMetadata
+        .map(table => `export * from './${table.name}';`)
+        .join('\n');
+    const apiIndexPath = path.join(outputBasePath, 'index.ts');
+    fs.writeFileSync(apiIndexPath, apiIndexContent, 'utf8');
+    console.log(`✅ Updated ${apiIndexPath}`);
+
+    // 5.2 Update src/index.ts if it exists
+    const mainIndexPath = path.join(process.cwd(), 'src/index.ts');
+    if (fs.existsSync(mainIndexPath)) {
+        let mainIndexContent = fs.readFileSync(mainIndexPath, 'utf8');
+        if (!mainIndexContent.includes('./lib/api')) {
+            mainIndexContent += "export * from './lib/api';\n";
+            fs.writeFileSync(mainIndexPath, mainIndexContent, 'utf8');
+            console.log(`✅ Updated ${mainIndexPath}`);
+        }
     }
 
     // 6. Generate Drizzle Schema

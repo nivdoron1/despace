@@ -179,13 +179,13 @@ function printCompletionMessage() {
     console.log('📁 Generated Service:');
     console.log('   - src/lib/stripe/stripe.service.ts');
     console.log('\n📝 Required Environment Variables:');
-    console.log('   - STRIPE_SECRET_KEY');
-    console.log('   - STRIPE_WEBHOOK_SECRET');
+    console.log('   - VITE_PUBLIC_STRIPE_SECRET_KEY');
+    console.log('   - VITE_PUBLIC_STRIPE_WEBHOOK_SECRET');
     console.log('   - SUPABASE_URL (auto-provided)');
     console.log('   - SUPABASE_SERVICE_ROLE_KEY (auto-provided)');
     console.log('   - FRONTEND_URL');
     console.log('\n🚀 Next Steps:');
     console.log('   1. Deploy: supabase functions deploy');
-    console.log('   2. Set secrets: supabase secrets set STRIPE_SECRET_KEY=sk_... FRONTEND_URL=https://...');
+    console.log('   2. Set secrets: supabase secrets set VITE_PUBLIC_STRIPE_SECRET_KEY=sk_... FRONTEND_URL=https://...');
     console.log('   3. Configure webhook: https://your-project.supabase.co/functions/v1/stripe-webhook-handler\n');
 }
