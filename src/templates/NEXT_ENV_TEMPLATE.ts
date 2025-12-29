@@ -7,8 +7,8 @@ declare namespace NodeJS {
         readonly NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
         readonly SUPABASE_SERVICE_ROLE_KEY?: string;
         readonly DATABASE_URL?: string;
-        readonly STRIPE_SECRET_KEY?: string;
-        readonly STRIPE_WEBHOOK_SECRET?: string;
+        readonly VITE_PUBLIC_STRIPE_SECRET_KEY?: string;
+        readonly VITE_PUBLIC_STRIPE_WEBHOOK_SECRET?: string;
     }
 }
 `;

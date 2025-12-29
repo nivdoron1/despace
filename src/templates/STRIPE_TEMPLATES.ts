@@ -217,7 +217,7 @@ export function createStripeService(
         secretKey = config.secretKey;
         apiVersion = config.apiVersion;
     } else {
-        secretKey = process.env.STRIPE_SECRET_KEY || '';
+        secretKey = import.meta.env.VITE_PUBLIC_STRIPE_SECRET_KEY || '';
     }
 
     if (!secretKey) throw new Error('Stripe secret key is required.');
@@ -336,7 +336,7 @@ export const STRIPE_SERVICE_TEMPLATE = `import { createStripeService } from './c
  */
 export const stripeService = {
   ...createStripeService({
-    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    secretKey: import.meta.env.VITE_PUBLIC_STRIPE_SECRET_KEY || '',
   }),
 
   // --- Add custom methods below ---
@@ -367,12 +367,12 @@ export const WEBHOOK_HANDLER_TEMPLATE = `// Stripe Webhook Handler
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripe = new Stripe(Deno.env.get('VITE_PUBLIC_STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
+const webhookSecret = Deno.env.get('VITE_PUBLIC_STRIPE_WEBHOOK_SECRET') || '';
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -512,7 +512,7 @@ import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripe = new Stripe(Deno.env.get('VITE_PUBLIC_STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
@@ -604,7 +604,7 @@ import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripe = new Stripe(Deno.env.get('VITE_PUBLIC_STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
@@ -684,7 +684,7 @@ import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripe = new Stripe(Deno.env.get('VITE_PUBLIC_STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
